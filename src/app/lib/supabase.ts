@@ -137,13 +137,12 @@ export async function getConnectionStatus() {
   }
 
   try {
-    new URL(supabaseUrl)
-    status.urlValid = true
-  } catch {
-    status.error = 'Invalid URL format'
-    return status
-  }
-
+  new URL(supabaseUrl!) // ✅ FIXED
+  status.urlValid = true
+} catch {
+  status.error = 'Invalid URL format'
+  return status
+}
   status.reachable = await checkSupabaseHealth()
 
   if (!status.reachable) {
