@@ -17,9 +17,9 @@ import {
   Clock,
   Edit,
   X,
-  Calendar
+  Calendar,
+  Lock
 } from 'lucide-react';
-
 interface ProfileData {
   firstName: string;
   lastName: string;
