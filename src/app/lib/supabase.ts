@@ -37,13 +37,14 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 })
 
-// Test connection function with more detailed error logging
+// Test connection function
 export async function testSupabaseConnection() {
   try {
     console.log('🔍 Testing Supabase connection...')
     
-    // First test: Check if we can reach the API
-    const { data: healthData, error: healthError } = await supabase.from('waste_records').select('count', { count: 'exact', head: true })
+    const { data: healthData, error: healthError } = await supabase
+      .from('waste_records')
+      .select('count', { count: 'exact', head: true })
     
     if (healthError) {
       console.error('❌ Supabase connection failed - Database error:', {
@@ -54,7 +55,7 @@ export async function testSupabaseConnection() {
       return false
     }
     
-    console.log('✅ Supabase connection successful! Database is reachable.')
+    console.log('✅ Supabase connection successful!')
     return true
   } catch (error: any) {
     console.error('❌ Supabase connection failed - Network error:', {
@@ -62,67 +63,59 @@ export async function testSupabaseConnection() {
       name: error.name,
       code: error.code
     })
-    
-    // Provide helpful error messages
-    if (error.message?.includes('Failed to fetch')) {
-      console.error('💡 Tip: Check if your Supabase project is paused. Visit https://app.supabase.com to reactivate it.')
-    } else if (error.message?.includes('Invalid API key')) {
-      console.error('💡 Tip: Your Supabase anon key might be incorrect. Check your .env.local file.')
-    } else if (error.message?.includes('fetch failed')) {
-      console.error('💡 Tip: Check your internet connection or try restarting your development server.')
-    }
-    
     return false
   }
 }
 
-// Session refresh with retry for network issues
+// Session refresh with retry
 export async function refreshSessionWithRetry(retries = 3) {
   for (let i = 0; i < retries; i++) {
     try {
-      console.log(`🔄 Refreshing session... (attempt ${i + 1}/${retries})`)
+      console.log(`🔄 Refreshing session... (${i + 1}/${retries})`)
       const { data, error } = await supabase.auth.refreshSession()
       
-      if (error) {
-        console.error('Session refresh error:', error.message)
-        throw error
-      }
+      if (error) throw error
       
       console.log('✅ Session refreshed successfully')
       return data
     } catch (err: any) {
-      const isNetworkError = err.message?.includes('Failed to fetch') || err.message?.includes('fetch failed')
-      
+      const isNetworkError =
+        err.message?.includes('Failed to fetch') ||
+        err.message?.includes('fetch failed')
+
       if (isNetworkError && i < retries - 1) {
-        const delay = 1000 * Math.pow(2, i) // Exponential backoff: 1s, 2s, 4s
-        console.log(`⚠️ Network error, retrying in ${delay}ms... (${i + 1}/${retries})`)
+        const delay = 1000 * Math.pow(2, i)
         await new Promise(resolve => setTimeout(resolve, delay))
         continue
       }
-      
-      console.error('❌ Session refresh failed after all retries:', err.message)
+
       throw err
     }
   }
-  
+
   throw new Error('Session refresh failed after maximum retries')
 }
 
-// Function to check if Supabase is reachable with timeout
+// ✅ FIXED FUNCTION (this caused your Vercel error)
 export async function checkSupabaseHealth(timeout = 5000): Promise<boolean> {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeout)
-  
+
   try {
+    // ✅ Explicit check (fixes TypeScript error)
+    if (!supabaseAnonKey) {
+      throw new Error("Missing NEXT_PUBLIC_SUPABASE_ANON_KEY")
+    }
+
     const response = await fetch(`${supabaseUrl}/rest/v1/`, {
       method: 'HEAD',
       headers: {
-        'apikey': supabaseAnonKey,
-        'Authorization': `Bearer ${supabaseAnonKey}`
+        apikey: supabaseAnonKey,
+        Authorization: `Bearer ${supabaseAnonKey}`,
       },
-      signal: controller.signal
+      signal: controller.signal,
     })
-    
+
     clearTimeout(timeoutId)
     return response.ok
   } catch (error: any) {
@@ -132,7 +125,7 @@ export async function checkSupabaseHealth(timeout = 5000): Promise<boolean> {
   }
 }
 
-// Function to get detailed connection status
+// Connection status checker
 export async function getConnectionStatus() {
   const status = {
     url: supabaseUrl,
@@ -140,10 +133,9 @@ export async function getConnectionStatus() {
     reachable: false,
     databaseAccessible: false,
     authAccessible: false,
-    error: null as string | null
+    error: null as string | null,
   }
-  
-  // Validate URL
+
   try {
     new URL(supabaseUrl)
     status.urlValid = true
@@ -151,30 +143,26 @@ export async function getConnectionStatus() {
     status.error = 'Invalid URL format'
     return status
   }
-  
-  // Check reachability
+
   status.reachable = await checkSupabaseHealth()
-  
+
   if (!status.reachable) {
-    status.error = 'Supabase server not reachable (project may be paused)'
+    status.error = 'Supabase server not reachable'
     return status
   }
-  
-  // Check database access
-  const dbResult = await testSupabaseConnection()
-  status.databaseAccessible = dbResult
-  
-  // Check auth access
+
+  status.databaseAccessible = await testSupabaseConnection()
+
   try {
     const { error } = await supabase.auth.getSession()
     status.authAccessible = !error
   } catch {
     status.authAccessible = false
   }
-  
+
   if (!status.databaseAccessible) {
-    status.error = 'Database access failed - check RLS policies'
+    status.error = 'Database access failed'
   }
-  
+
   return status
 }
