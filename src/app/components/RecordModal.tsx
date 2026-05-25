@@ -20,7 +20,6 @@ interface RecordModalProps {
 export function RecordModal({ isOpen, onClose, onSave, editingRecord, initialData }: RecordModalProps) {
   const [localFormData, setLocalFormData] = useState(initialData);
 
-  // Reset local form when modal opens or initialData changes
   useEffect(() => {
     if (isOpen) {
       setLocalFormData(initialData);

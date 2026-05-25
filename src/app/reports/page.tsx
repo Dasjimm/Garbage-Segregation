@@ -6,6 +6,7 @@ import ProtectedLayout from '@/app/components/ProtectedLayout';
 import { useRecyclingData } from '@/app/context/RecyclingDataContext';
 import { useConfirmation } from '@/app/context/ConfirmationContext';
 import { useNotification } from '@/app/context/NotificationContext';
+import { supabase } from '@/app/lib/supabase';
 import {
   Calendar,
   Filter,
@@ -79,6 +80,7 @@ export default function ReportsPage() {
     notes: ''
   });
   const inputTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [lastActiveTime, setLastActiveTime] = useState(Date.now());
 
   useEffect(() => {
     const loadArchivedReports = () => {
@@ -242,6 +244,87 @@ export default function ReportsPage() {
       });
     }
   }, [error, showNotification]);
+
+  // ========== TAB VISIBILITY FIX ==========
+  // Handle tab visibility - force refresh when returning to the tab
+  useEffect(() => {
+    let refreshTimeout: NodeJS.Timeout;
+    
+    const handleVisibilityChange = async () => {
+      const now = Date.now();
+      const timeSinceLastActive = now - lastActiveTime;
+      
+      console.log(`Tab visibility changed. Time since last active: ${timeSinceLastActive}ms`);
+      
+      if (document.visibilityState === 'visible') {
+        // If tab was inactive for more than 2 minutes, force reload
+        if (timeSinceLastActive > 2 * 60 * 1000) {
+          console.log('Tab was inactive for >2 minutes, forcing page reload...');
+          window.location.reload();
+          return;
+        }
+        
+        // Show live indicator
+        setShowLiveIndicator(true);
+        
+        // Clear any existing timeout
+        if (refreshTimeout) clearTimeout(refreshTimeout);
+        
+        // Refresh the data
+        refreshTimeout = setTimeout(() => {
+          setShowLiveIndicator(false);
+        }, 2000);
+        
+        // Update last active time
+        setLastActiveTime(now);
+      } else {
+        // Tab became inactive, update last active time
+        setLastActiveTime(now);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (refreshTimeout) clearTimeout(refreshTimeout);
+    };
+  }, [lastActiveTime]);
+
+  // Recover session when page becomes active again
+  useEffect(() => {
+    const recoverSession = async () => {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        console.log('Session expired, attempting to refresh...');
+        const { error: refreshError } = await supabase.auth.refreshSession();
+        if (refreshError) {
+          console.log('Session refresh failed, user may need to login again');
+        } else {
+          console.log('Session refreshed successfully');
+        }
+      }
+    };
+    
+    recoverSession();
+    
+    // Also set up an interval to check session periodically (every 5 minutes)
+    const interval = setInterval(() => {
+      recoverSession();
+    }, 5 * 60 * 1000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  // Update last active time periodically when tab is visible
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        setLastActiveTime(Date.now());
+      }
+    }, 10000);
+    return () => clearInterval(interval);
+  }, []);
+  // ========================================
 
   const totalPaper = wasteRecords.reduce((sum, r) => sum + (r.paper || 0), 0);
   const totalPlastic = wasteRecords.reduce((sum, r) => sum + (r.plastic || 0), 0);
@@ -647,9 +730,9 @@ export default function ReportsPage() {
 
   const MobileView = () => (
     <div className="w-full px-2 py-3 animate-fade-in">
+      {/* Header - Removed title, only kept action buttons */}
       <div className="flex flex-col gap-3 mb-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold text-gray-900">Reports</h1>
+        <div className="flex justify-end">
           {showLiveIndicator && (
             <div className="flex items-center gap-1 bg-green-100 text-green-700 px-2 py-1 rounded-full animate-pulse text-[10px]">
               <Zap size={10} />
@@ -657,7 +740,6 @@ export default function ReportsPage() {
             </div>
           )}
         </div>
-        <p className="text-xs text-gray-600">Track and analyze recycling performance</p>
         <div className="flex gap-2">
           <button
             onClick={exportToCSV}
@@ -812,19 +894,8 @@ export default function ReportsPage() {
 
   const DesktopView = () => (
     <div className="w-full px-2 sm:px-3 md:px-4 lg:px-5 xl:px-6 py-3 sm:py-4 md:py-5 lg:py-6 animate-fade-in">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 sm:mb-5 md:mb-6">
-        <div>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900">Reports & Analytics</h1>
-            {showLiveIndicator && (
-              <div className="flex items-center gap-1 bg-green-100 text-green-700 px-2 py-1 rounded-full animate-pulse text-xs">
-                <Zap size={12} />
-                <span>Live</span>
-              </div>
-            )}
-          </div>
-          <p className="text-xs sm:text-sm text-gray-600 mt-1">Track and analyze recycling performance</p>
-        </div>
+      {/* Header - Removed title, kept action buttons aligned to right */}
+      <div className="flex flex-col sm:flex-row justify-end items-end gap-3 mb-4 sm:mb-5 md:mb-6">
         <div className="flex gap-2 w-full sm:w-auto">
           <button
             onClick={() => setIsHistoryModalOpen(true)}
@@ -849,6 +920,16 @@ export default function ReportsPage() {
           </button>
         </div>
       </div>
+
+      {/* Live indicator moved to top right */}
+      {showLiveIndicator && (
+        <div className="flex justify-end mb-2">
+          <div className="flex items-center gap-1 bg-green-100 text-green-700 px-2 py-1 rounded-full animate-pulse text-xs">
+            <Zap size={12} />
+            <span>Live</span>
+          </div>
+        </div>
+      )}
 
       <div className="bg-purple-50 border-l-4 border-purple-500 p-3 rounded-lg flex items-center gap-2 mb-4">
         <Clock size={16} className="text-purple-600 flex-shrink-0" />
@@ -1037,96 +1118,96 @@ export default function ReportsPage() {
         {isMobile ? <MobileView /> : <DesktopView />}
       </div>
 
-     <RecordModal
-  isOpen={isModalOpen}
-  onClose={closeModal}
-  onSave={async (data) => {
-    // Set the form data from modal
-    setFormData(data);
-    
-    // Then call your existing submit logic
-    if (!data.date || !data.paper || !data.plastic || !data.metal) {
-      showNotification({
-        message: 'Please fill all required fields before saving',
-        type: 'warning',
-        duration: 3000
-      });
-      return;
-    }
-
-    const paper = parseFloat(data.paper) || 0;
-    const plastic = parseFloat(data.plastic) || 0;
-    const metal = parseFloat(data.metal) || 0;
-    const notes = data.notes?.trim() || null;
-
-    try {
-      const existingRecord = wasteRecords.find(r => r.date === data.date);
-      
-      if (existingRecord && !editingRecord) {
-        confirm({
-          title: 'Date Already Exists',
-          message: `A record for ${data.date} already exists. Do you want to update it instead?`,
-          confirmText: 'Update Existing',
-          cancelText: 'Cancel',
-          type: 'warning',
-          onConfirm: async () => {
-            await updateWasteRecord(existingRecord.id, {
-              date: data.date,
-              paper,
-              plastic,
-              metal,
-              notes
-            });
+      <RecordModal
+        isOpen={isModalOpen}
+        onClose={closeModal}
+        onSave={async (data) => {
+          // Set the form data from modal
+          setFormData(data);
+          
+          // Then call your existing submit logic
+          if (!data.date || !data.paper || !data.plastic || !data.metal) {
             showNotification({
-              message: 'Record updated successfully!',
-              type: 'success',
+              message: 'Please fill all required fields before saving',
+              type: 'warning',
               duration: 3000
             });
-            closeModal();
+            return;
           }
-        });
-        return;
-      }
 
-      if (editingRecord) {
-        await updateWasteRecord(editingRecord.id, {
-          date: data.date,
-          paper,
-          plastic,
-          metal,
-          notes
-        });
-        showNotification({
-          message: 'Record updated successfully!',
-          type: 'success',
-          duration: 3000
-        });
-      } else {
-        await addWasteRecord({
-          date: data.date,
-          paper,
-          plastic,
-          metal,
-          notes
-        });
-        showNotification({
-          message: 'Record added successfully!',
-          type: 'success',
-          duration: 3000
-        });
-      }
-      closeModal();
-    } catch (err: any) {
-      showNotification({
-        message: err.message || 'Error saving record',
-        type: 'error',
-        duration: 3000
-      });
-    }
-  }}
-  editingRecord={editingRecord}
-  initialData={formData}
-/>
+          const paper = parseFloat(data.paper) || 0;
+          const plastic = parseFloat(data.plastic) || 0;
+          const metal = parseFloat(data.metal) || 0;
+          const notes = data.notes?.trim() || null;
+
+          try {
+            const existingRecord = wasteRecords.find(r => r.date === data.date);
+            
+            if (existingRecord && !editingRecord) {
+              confirm({
+                title: 'Date Already Exists',
+                message: `A record for ${data.date} already exists. Do you want to update it instead?`,
+                confirmText: 'Update Existing',
+                cancelText: 'Cancel',
+                type: 'warning',
+                onConfirm: async () => {
+                  await updateWasteRecord(existingRecord.id, {
+                    date: data.date,
+                    paper,
+                    plastic,
+                    metal,
+                    notes
+                  });
+                  showNotification({
+                    message: 'Record updated successfully!',
+                    type: 'success',
+                    duration: 3000
+                  });
+                  closeModal();
+                }
+              });
+              return;
+            }
+
+            if (editingRecord) {
+              await updateWasteRecord(editingRecord.id, {
+                date: data.date,
+                paper,
+                plastic,
+                metal,
+                notes
+              });
+              showNotification({
+                message: 'Record updated successfully!',
+                type: 'success',
+                duration: 3000
+              });
+            } else {
+              await addWasteRecord({
+                date: data.date,
+                paper,
+                plastic,
+                metal,
+                notes
+              });
+              showNotification({
+                message: 'Record added successfully!',
+                type: 'success',
+                duration: 3000
+              });
+            }
+            closeModal();
+          } catch (err: any) {
+            showNotification({
+              message: err.message || 'Error saving record',
+              type: 'error',
+              duration: 3000
+            });
+          }
+        }}
+        editingRecord={editingRecord}
+        initialData={formData}
+      />
 
       {isHistoryModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-3">

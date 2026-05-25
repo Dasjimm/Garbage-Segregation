@@ -8,6 +8,7 @@ import { useSupabaseAuth } from '@/app/context/SupabaseAuthContext';
 import { useRecyclingData } from '@/app/context/RecyclingDataContext';
 import { useConfirmation } from '@/app/context/ConfirmationContext';
 import { useNotification } from '@/app/context/NotificationContext';
+import { supabase } from '@/app/lib/supabase';
 import {
   FileText,
   Package,
@@ -20,12 +21,11 @@ import {
   X,
   BarChart3,
   PieChart,
-  Filter,
-  Activity,
-  Zap,
-  Target,
-  Shield,
-  LayoutDashboard
+  LayoutDashboard,
+  RefreshCw,
+  MapPin,
+  Truck,
+  CheckCircle
 } from 'lucide-react';
 
 interface Pickup {
@@ -33,9 +33,9 @@ interface Pickup {
   day: string;
   type: string;
   time: string;
+  user_id: string;
+  created_at?: string;
 }
-
-const PICKUPS_STORAGE_KEY = 'ecowaste_pickups';
 
 const dayOptions = [
   'Today',
@@ -63,7 +63,7 @@ const getColorClasses = (color: string) => {
   return colorClasses[color as keyof typeof colorClasses] || colorClasses.teal;
 };
 
-// Separate PickupModal component to isolate state
+// Pickup Modal Component
 const PickupModal = memo(({ 
   isOpen, 
   onClose, 
@@ -85,7 +85,6 @@ const PickupModal = memo(({
     return () => setMounted(false);
   }, []);
 
-  // Reset local form when modal opens or initialData changes
   useEffect(() => {
     if (isOpen) {
       setLocalFormData(initialData);
@@ -104,23 +103,28 @@ const PickupModal = memo(({
   };
 
   return createPortal(
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md transform transition-all duration-300 scale-100" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-bold text-gray-900">{editingPickup ? 'Edit Pickup' : 'Add New Pickup'}</h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700 transition-colors p-1 rounded-full hover:bg-gray-100">
+          <div className="flex items-center gap-2">
+            <div className="p-2 bg-teal-100 rounded-xl">
+              <Truck size={20} className="text-teal-600" />
+            </div>
+            <h2 className="text-xl font-bold text-gray-900">{editingPickup ? 'Edit Pickup' : 'Schedule Pickup'}</h2>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-full hover:bg-gray-100">
             <X size={20} />
           </button>
         </div>
         
         <div className="space-y-5">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Day</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Pickup Day</label>
             <select 
               name="day" 
               value={localFormData.day} 
               onChange={handleInputChange} 
-              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors bg-white"
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all bg-gray-50"
             >
               <option value="">Select Day</option>
               {dayOptions.map(day => <option key={day} value={day}>{day}</option>)}
@@ -133,7 +137,7 @@ const PickupModal = memo(({
               name="type" 
               value={localFormData.type} 
               onChange={handleInputChange} 
-              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors bg-white"
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all bg-gray-50"
             >
               <option value="">Select Type</option>
               {typeOptions.map(type => <option key={type} value={type}>{type}</option>)}
@@ -141,23 +145,23 @@ const PickupModal = memo(({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Time</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Pickup Time</label>
             <input 
               type="text" 
               name="time" 
               value={localFormData.time} 
               onChange={handleInputChange} 
               placeholder="e.g., 9:00 AM, 10:30 PM" 
-              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors bg-white" 
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all bg-gray-50" 
             />
-            <p className="text-xs text-gray-500 mt-2">Format: hour:minute AM/PM (e.g., 9:00 AM, 10:30 PM)</p>
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 mt-6">
-          <button onClick={onClose} className="px-5 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">Cancel</button>
-          <button onClick={handleSubmit} className="px-5 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 transition-colors">
-            {editingPickup ? 'Update Pickup' : 'Add Pickup'}
+        <div className="flex justify-end gap-3 mt-8">
+          <button onClick={onClose} className="px-5 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-all">Cancel</button>
+          <button onClick={handleSubmit} className="px-5 py-2.5 bg-teal-600 text-white rounded-xl text-sm font-medium hover:bg-teal-700 transition-all shadow-lg hover:shadow-xl flex items-center gap-2">
+            <Truck size={16} />
+            {editingPickup ? 'Update Pickup' : 'Schedule Pickup'}
           </button>
         </div>
       </div>
@@ -168,500 +172,314 @@ const PickupModal = memo(({
 
 PickupModal.displayName = 'PickupModal';
 
-const MetricsCards = memo(({ metrics }: { metrics: any[] }) => {
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-      {metrics.map((metric, idx) => {
-        const Icon = metric.icon;
-        const colors = getColorClasses(metric.color);
-        const hasData = metric.data > 0;
-
-        return (
-          <div key={idx} className={`bg-white rounded-xl shadow-md p-6 border-l-4 ${colors.border} transition-all duration-300 hover:shadow-xl hover:-translate-y-1 hover:border-l-8 cursor-pointer group ${colors.hoverBg}`}>
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-sm text-gray-600 font-medium group-hover:text-gray-900 transition-colors">{metric.label}</p>
-                <p className="text-2xl font-bold text-gray-900 mt-2 group-hover:scale-105 transition-transform origin-left">{metric.value}</p>
-                {!hasData && <p className="text-xs text-gray-400 mt-1">No data for selected date</p>}
-              </div>
-              <div className={`p-3 rounded-lg ${hasData ? colors.bg : 'bg-gray-100'} group-hover:scale-110 transition-transform group-hover:rotate-3`}>
-                <Icon className={`${hasData ? colors.text : 'text-gray-400'}`} size={28} />
-              </div>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-});
-
-MetricsCards.displayName = 'MetricsCards';
-
-const ChartSection = memo(({ 
-  selectedChartType, 
-  setSelectedChartType, 
-  selectedDate, 
-  chartData, 
-  maxValue, 
-  todayData 
-}: { 
-  selectedChartType: 'bar' | 'pie'; 
-  setSelectedChartType: (type: 'bar' | 'pie') => void; 
-  selectedDate: string; 
-  chartData: any[]; 
-  maxValue: number; 
-  todayData: any;
-}) => {
-  const renderGridLines = useCallback(() => {
-    return [0, 1, 2, 3, 4].map(i => (
-      <div key={i} className="absolute w-full border-t border-gray-200 border-dashed" style={{ bottom: `${(i / 4) * 100}%` }} />
-    ));
-  }, []);
-
-  return (
-    <div className="lg:col-span-2 bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition-all duration-300">
-      <div className="flex justify-between items-center mb-4">
-        <div className="flex items-center gap-2">
-          <BarChart3 size={24} className="text-teal-600" />
-          <h3 className="text-lg font-semibold text-gray-900">
-            {selectedChartType === 'bar' ? 'Last 7 Days Trend' : `Composition for ${selectedDate}`}
-          </h3>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={() => setSelectedChartType('bar')} className={`p-2 rounded-lg transition-all duration-200 ${selectedChartType === 'bar' ? 'bg-teal-100 text-teal-600 scale-105' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:scale-105'}`}>
-            <BarChart3 size={18} />
-          </button>
-          <button onClick={() => setSelectedChartType('pie')} className={`p-2 rounded-lg transition-all duration-200 ${selectedChartType === 'pie' ? 'bg-teal-100 text-teal-600 scale-105' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:scale-105'}`}>
-            <PieChart size={18} />
-          </button>
-        </div>
-      </div>
-      
-      {selectedChartType === 'bar' ? (
-        <div className="space-y-4">
-          <div className="flex justify-between text-sm text-gray-600 mb-2">
-            <span>Last 7 Days Recycling Trend (kg)</span>
-            <span className="text-xs bg-teal-50 text-teal-600 px-2 py-1 rounded-full hover:bg-teal-100 transition-colors">Based on {chartData.length} days</span>
-          </div>
-          {chartData.length > 0 ? (
-            <div className="h-64 relative">
-              <div className="absolute inset-0 pointer-events-none">
-                {renderGridLines()}
-                <div className="absolute h-full w-px bg-gray-200 left-1/4"></div>
-                <div className="absolute h-full w-px bg-gray-200 left-1/2"></div>
-                <div className="absolute h-full w-px bg-gray-200 left-3/4"></div>
-              </div>
-              
-              <div className="h-full flex items-end justify-between gap-2 relative z-10">
-                {chartData.map((data, idx) => {
-                  const paperHeight = ((data.paper || 0) / maxValue) * 180;
-                  const plasticHeight = ((data.plastic || 0) / maxValue) * 180;
-                  const metalHeight = ((data.metal || 0) / maxValue) * 180;
-                  
-                  return (
-                    <div key={idx} className="flex-1 flex flex-col items-center gap-2 group h-full justify-end">
-                      <div className="relative w-full flex justify-center gap-1 items-end">
-                        <div className="w-4 bg-blue-500 rounded-t transition-all duration-300 group-hover:bg-blue-600 group-hover:w-5 group-hover:shadow-lg" style={{ height: `${paperHeight}px` }} title={`Paper: ${data.paper || 0}kg`} />
-                        <div className="w-4 bg-yellow-500 rounded-t transition-all duration-300 group-hover:bg-yellow-600 group-hover:w-5 group-hover:shadow-lg" style={{ height: `${plasticHeight}px` }} title={`Plastic: ${data.plastic || 0}kg`} />
-                        <div className="w-4 bg-purple-500 rounded-t transition-all duration-300 group-hover:bg-purple-600 group-hover:w-5 group-hover:shadow-lg" style={{ height: `${metalHeight}px` }} title={`Metal: ${data.metal || 0}kg`} />
-                      </div>
-                      <div className="text-xs text-gray-600 font-medium mt-2 group-hover:text-teal-600 transition-colors">{data.date.slice(5)}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ) : (
-            <div className="h-64 flex items-center justify-center bg-gray-50 rounded-lg">
-              <p className="text-gray-500">No data available for the last 7 days</p>
-            </div>
-          )}
-          <div className="flex justify-center gap-6 mt-4 text-sm">
-            <div className="flex items-center gap-2"><div className="w-3 h-3 bg-blue-500 rounded"></div>Paper</div>
-            <div className="flex items-center gap-2"><div className="w-3 h-3 bg-yellow-500 rounded"></div>Plastic</div>
-            <div className="flex items-center gap-2"><div className="w-3 h-3 bg-purple-500 rounded"></div>Metal</div>
-          </div>
-        </div>
-      ) : (
-        <div className="h-64 flex items-center justify-center">
-          {todayData.total > 0 ? (
-            <div className="flex items-center gap-8">
-              <div className="relative w-48 h-48 group">
-                <svg viewBox="0 0 100 100" className="transform -rotate-90 w-full h-full transition-transform duration-300 group-hover:scale-105">
-                  <circle cx="50" cy="50" r="40" fill="none" stroke="#3B82F6" strokeWidth="20" strokeDasharray={`${((todayData.paper || 0) / todayData.total) * 251.2} 251.2`} />
-                  <circle cx="50" cy="50" r="40" fill="none" stroke="#EAB308" strokeWidth="20" strokeDasharray={`${((todayData.plastic || 0) / todayData.total) * 251.2} 251.2`} strokeDashoffset={`-${((todayData.paper || 0) / todayData.total) * 251.2}`} />
-                  <circle cx="50" cy="50" r="40" fill="none" stroke="#A855F7" strokeWidth="20" strokeDasharray={`${((todayData.metal || 0) / todayData.total) * 251.2} 251.2`} strokeDashoffset={`-${(((todayData.paper || 0) + (todayData.plastic || 0)) / todayData.total) * 251.2}`} />
-                </svg>
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2"><div className="w-3 h-3 bg-blue-500 rounded"></div>Paper: {todayData.paper}kg</div>
-                <div className="flex items-center gap-2"><div className="w-3 h-3 bg-yellow-500 rounded"></div>Plastic: {todayData.plastic}kg</div>
-                <div className="flex items-center gap-2"><div className="w-3 h-3 bg-purple-500 rounded"></div>Metal: {todayData.metal}kg</div>
-              </div>
-            </div>
-          ) : (
-            <div className="text-center">
-              <div className="w-48 h-48 bg-gray-100 rounded-full flex items-center justify-center">
-                <span className="text-gray-400">No data for {selectedDate}</span>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-});
-
-ChartSection.displayName = 'ChartSection';
-
-const PickupsSection = memo(({ 
-  pickups, 
-  onEdit, 
-  onDelete, 
-  onAdd 
-}: { 
-  pickups: Pickup[]; 
-  onEdit: (pickup: Pickup) => void; 
-  onDelete: (id: number) => void; 
-  onAdd: () => void;
-}) => {
-  return (
-    <div className="bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition-all duration-300">
-      <div className="flex justify-between items-center mb-4">
-        <div className="flex items-center gap-2">
-          <Calendar size={20} className="text-teal-600" />
-          <h3 className="text-lg font-semibold text-gray-900">Upcoming Pickups</h3>
-        </div>
-        <button onClick={onAdd} className="flex items-center gap-1 text-teal-600 hover:text-teal-800 text-sm font-medium hover:scale-105 transition-all">
-          <Plus size={16} /> Add
-        </button>
-      </div>
-      <div className="space-y-4">
-        {pickups.length > 0 ? (
-          pickups.map((item) => (
-            <div key={item.id} className="flex items-center justify-between p-3 bg-teal-50 rounded-lg hover:bg-teal-100 transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 group">
-              <div className="flex items-start gap-3">
-                <Calendar size={16} className="text-teal-600 mt-1 group-hover:scale-110 transition-transform" />
-                <div>
-                  <p className="text-sm font-medium text-gray-900 group-hover:text-teal-700 transition-colors">{item.day}</p>
-                  <p className="text-xs text-gray-600 group-hover:text-teal-600 transition-colors">{item.type}</p>
-                  <div className="flex items-center gap-1 mt-1">
-                    <Clock size={12} className="text-gray-500 group-hover:text-teal-500 transition-colors" />
-                    <p className="text-xs text-gray-500 group-hover:text-teal-600 transition-colors">{item.time}</p>
-                  </div>
-                </div>
-              </div>
-              <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300">
-                <button onClick={() => onEdit(item)} className="text-blue-600 hover:text-blue-800 hover:scale-110 transition-all"><Edit size={16} /></button>
-                <button onClick={() => onDelete(item.id)} className="text-red-600 hover:text-red-800 hover:scale-110 transition-all"><Trash2 size={16} /></button>
-              </div>
-            </div>
-          ))
-        ) : (
-          <p className="text-center text-gray-500 py-4">No pickups scheduled</p>
-        )}
-      </div>
-    </div>
-  );
-});
-
-PickupsSection.displayName = 'PickupsSection';
-
-const MaterialBreakdown = memo(({ totals }: { totals: { paper: number; plastic: number; metal: number; grand: number } }) => {
-  const items = useMemo(() => [
-    { label: 'Paper', value: totals.paper, color: 'blue', icon: FileText },
-    { label: 'Plastic', value: totals.plastic, color: 'yellow', icon: Package },
-    { label: 'Metal', value: totals.metal, color: 'purple', icon: Recycle }
-  ], [totals]);
-
-  return (
-    <div className="bg-gradient-to-r from-teal-50 to-blue-50 rounded-xl p-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">Material Breakdown</h3>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {items.map((item, idx) => {
-          const colors = getColorClasses(item.color);
-          return (
-            <div key={idx} className="bg-white rounded-lg p-4 shadow-sm">
-              <div className="flex justify-between items-center mb-2">
-                <div className={`flex items-center gap-2 ${colors.text}`}>
-                  <item.icon size={20} />
-                  <span className="font-medium">{item.label}</span>
-                </div>
-                <span className={`text-lg font-bold ${colors.text}`}>{((item.value / totals.grand) * 100 || 0).toFixed(1)}%</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2.5">
-                <div className={`${colors.bg} h-2.5 rounded-full`} style={{ width: `${(item.value / totals.grand) * 100 || 0}%` }} />
-              </div>
-              <p className="text-sm text-gray-600 mt-2">{item.value.toFixed(1)} kg total</p>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-});
-
-MaterialBreakdown.displayName = 'MaterialBreakdown';
-
-const MobileViewComponent = memo(({ 
-  metrics, 
-  chartData, 
-  maxValue, 
-  todayData, 
-  pickups, 
-  totals,
-  selectedChartType, 
-  setSelectedChartType,
-  onEdit,
-  onDelete,
-  onAdd
-}: { 
-  metrics: any[]; 
-  chartData: any[]; 
-  maxValue: number; 
-  todayData: any; 
-  pickups: Pickup[]; 
-  totals: any;
-  selectedChartType: 'bar' | 'pie'; 
-  setSelectedChartType: (type: 'bar' | 'pie') => void;
-  onEdit: (pickup: Pickup) => void;
-  onDelete: (id: number) => void;
-  onAdd: () => void;
-}) => {
-  return (
-    <div className="w-full px-2 py-3 animate-fade-in">
-      <div className="flex items-center gap-2 mb-4">
-        <div className="p-1.5 bg-teal-100 rounded-lg">
-          <LayoutDashboard size={20} className="text-teal-600" />
-        </div>
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-xs text-gray-500">Overview of your activities</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2 mb-3">
-        {metrics.map((metric, idx) => {
-          const colors = getColorClasses(metric.color);
-          const Icon = metric.icon;
-          const hasData = metric.data > 0;
-
-          return (
-            <div key={idx} className={`bg-white rounded-lg shadow-sm p-2 border-l-2 ${colors.border}`}>
-              <div className="flex items-start justify-between">
-                <div className="min-w-0 flex-1">
-                  <p className="text-[10px] text-gray-600 truncate">{metric.label}</p>
-                  <p className="text-xs font-bold text-gray-900 truncate">{metric.value}</p>
-                </div>
-                <div className={`p-1.5 rounded ${hasData ? colors.bg : 'bg-gray-100'} ml-1`}>
-                  <Icon className={`${hasData ? colors.text : 'text-gray-400'}`} size={14} />
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="bg-white rounded-lg shadow-sm p-3 mb-3">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-semibold">Last 7 Days</h3>
-          <div className="flex gap-1">
-            <button onClick={() => setSelectedChartType('bar')} className={`p-1 rounded ${selectedChartType === 'bar' ? 'bg-teal-100 text-teal-600' : 'bg-gray-100'}`}>
-              <BarChart3 size={14} />
-            </button>
-            <button onClick={() => setSelectedChartType('pie')} className={`p-1 rounded ${selectedChartType === 'pie' ? 'bg-teal-100 text-teal-600' : 'bg-gray-100'}`}>
-              <PieChart size={14} />
-            </button>
-          </div>
-        </div>
-        {selectedChartType === 'bar' ? (
-          <div className="h-24 flex items-end justify-between gap-1">
-            {chartData.map((data, idx) => (
-              <div key={idx} className="flex-1 flex flex-col items-center">
-                <div className="w-full flex justify-center gap-0.5">
-                  <div className="w-1 bg-blue-500 rounded-t" style={{ height: `${(data.paper / maxValue) * 40}px` }} />
-                  <div className="w-1 bg-yellow-500 rounded-t" style={{ height: `${(data.plastic / maxValue) * 40}px` }} />
-                  <div className="w-1 bg-purple-500 rounded-t" style={{ height: `${(data.metal / maxValue) * 40}px` }} />
-                </div>
-                <span className="text-[8px] mt-1">{data.date.slice(5)}</span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="h-24 flex items-center justify-center">
-            {todayData.total > 0 ? (
-              <div className="w-12 h-12">
-                <svg viewBox="0 0 100 100" className="transform -rotate-90">
-                  <circle cx="50" cy="50" r="40" fill="none" stroke="#3B82F6" strokeWidth="20" strokeDasharray={`${(todayData.paper / todayData.total) * 251.2} 251.2`} />
-                  <circle cx="50" cy="50" r="40" fill="none" stroke="#EAB308" strokeWidth="20" strokeDasharray={`${(todayData.plastic / todayData.total) * 251.2} 251.2`} strokeDashoffset={`-${(todayData.paper / todayData.total) * 251.2}`} />
-                  <circle cx="50" cy="50" r="40" fill="none" stroke="#A855F7" strokeWidth="20" strokeDasharray={`${(todayData.metal / todayData.total) * 251.2} 251.2`} strokeDashoffset={`-${((todayData.paper + todayData.plastic) / todayData.total) * 251.2}`} />
-                </svg>
-              </div>
-            ) : (
-              <span className="text-xs text-gray-400">No data</span>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div className="bg-white rounded-lg shadow-sm p-3 mb-3">
-        <div className="flex justify-between items-center mb-2">
-          <h3 className="text-sm font-semibold">Upcoming Pickups</h3>
-          <button onClick={onAdd} className="text-teal-600 text-xs flex items-center gap-1">
-            <Plus size={12} /> Add
-          </button>
-        </div>
-        <div className="space-y-2 max-h-48 overflow-y-auto">
-          {pickups.length > 0 ? (
-            pickups.map((item) => (
-              <div key={item.id} className="flex items-center justify-between p-2 bg-teal-50 rounded">
-                <div>
-                  <p className="text-xs font-medium">{item.day}</p>
-                  <p className="text-[10px] text-gray-600">{item.type}</p>
-                  <p className="text-[8px] text-gray-500">{item.time}</p>
-                </div>
-                <div className="flex gap-1">
-                  <button onClick={() => onEdit(item)} className="text-blue-600 p-0.5">
-                    <Edit size={10} />
-                  </button>
-                  <button onClick={() => onDelete(item.id)} className="text-red-600 p-0.5">
-                    <Trash2 size={10} />
-                  </button>
-                </div>
-              </div>
-            ))
-          ) : (
-            <p className="text-center text-gray-500 py-4 text-xs">No pickups scheduled</p>
-          )}
-        </div>
-      </div>
-
-      <div className="bg-gradient-to-r from-teal-50 to-blue-50 rounded-lg p-3">
-        <h3 className="text-sm font-semibold mb-2">Material Breakdown</h3>
-        <div className="space-y-3">
-          {[
-            { label: 'Paper', value: totals.paper, color: 'blue' },
-            { label: 'Plastic', value: totals.plastic, color: 'yellow' },
-            { label: 'Metal', value: totals.metal, color: 'purple' }
-          ].map((item, idx) => {
-            const colors = getColorClasses(item.color);
-            return (
-              <div key={idx}>
-                <div className="flex justify-between text-xs mb-1">
-                  <span>{item.label}</span>
-                  <span className={`font-medium ${colors.text}`}>{((item.value / totals.grand) * 100 || 0).toFixed(1)}%</span>
-                </div>
-                <div className="w-full bg-gray-200 h-1.5 rounded-full">
-                  <div className={`${colors.bg} h-1.5 rounded-full`} style={{ width: `${(item.value / totals.grand) * 100 || 0}%` }} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-});
-
-MobileViewComponent.displayName = 'MobileViewComponent';
-
+// Main Dashboard Component
 export default function DashboardPage() {
   const { user } = useSupabaseAuth();
-  const { wasteRecords, error, isLoading: isWasteDataLoading } = useRecyclingData();
+  const { wasteRecords, isLoading: isWasteDataLoading, refreshData } = useRecyclingData();
   const { confirm } = useConfirmation();
   const { showNotification } = useNotification();
   
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedChartType, setSelectedChartType] = useState<'bar' | 'pie'>('bar');
-  const [filterType, setFilterType] = useState<string>('all');
   const [showLiveIndicator, setShowLiveIndicator] = useState(false);
-  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
-  const [currentTime, setCurrentTime] = useState(new Date());
   const [isMobile, setIsMobile] = useState(false);
+  const [hoveredSlice, setHoveredSlice] = useState<string | null>(null);
+  const [hoveredBar, setHoveredBar] = useState<{ date: string; paper: number; plastic: number; metal: number } | null>(null);
+  const [selectedBar, setSelectedBar] = useState<{ date: string; paper: number; plastic: number; metal: number } | null>(null);
+  const [selectedSlice, setSelectedSlice] = useState<string | null>(null);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPickup, setEditingPickup] = useState<Pickup | null>(null);
-  
   const [isLoading, setIsLoading] = useState(true);
   const [pickups, setPickups] = useState<Pickup[]>([]);
-  
-  // Form data for pickups - kept at parent level for modal initial values
-  const [formData, setFormData] = useState({ 
-    day: '', 
-    type: '', 
-    time: '' 
+  const [formData, setFormData] = useState({ day: '', type: '', time: '' });
+  const [lastActiveTime, setLastActiveTime] = useState(Date.now());
+
+  // Dashboard visibility state
+  const [dashboardVisibility, setDashboardVisibility] = useState({
+    showMetricsCards: true,
+    showChart: true,
+    showPickupsSidebar: true,
+    showMaterialBreakdown: true,
   });
 
+  // Load pickups from Supabase
+  const loadPickups = useCallback(async () => {
+    if (!user?.id) {
+      console.log('No user logged in');
+      setIsLoading(false);
+      return;
+    }
+    
+    try {
+      setIsLoading(true);
+      console.log('Loading pickups for user:', user.id);
+      
+      const { data, error } = await supabase
+        .from('daily_pickup')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
+      
+      console.log('Pickups loaded:', data?.length || 0);
+      setPickups(data || []);
+    } catch (error: any) {
+      console.error('Error loading pickups:', error.message);
+      showNotification({
+        message: error.message || 'Failed to load pickups',
+        type: 'error',
+        duration: 3000
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user?.id, showNotification]);
+
+  // Add pickup to Supabase
+  const addPickup = useCallback(async (pickupData: { day: string; type: string; time: string }) => {
+    if (!user?.id) {
+      showNotification({
+        message: 'Please login to add pickups',
+        type: 'error',
+        duration: 3000
+      });
+      return;
+    }
+
+    try {
+      console.log('Adding pickup:', pickupData);
+      
+      const { data, error } = await supabase
+        .from('daily_pickup')
+        .insert([{
+          day: pickupData.day,
+          type: pickupData.type,
+          time: pickupData.time,
+          user_id: user.id
+        }])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Insert error:', error);
+        throw error;
+      }
+      
+      console.log('Pickup added successfully:', data);
+      setPickups(prev => [data, ...prev]);
+      
+      showNotification({
+        message: 'Pickup scheduled successfully!',
+        type: 'success',
+        duration: 3000
+      });
+      
+      return data;
+    } catch (error: any) {
+      console.error('Error adding pickup:', error.message);
+      showNotification({
+        message: error.message || 'Failed to schedule pickup',
+        type: 'error',
+        duration: 3000
+      });
+      throw error;
+    }
+  }, [user?.id, showNotification]);
+
+  // Update pickup in Supabase
+  const updatePickup = useCallback(async (id: number, pickupData: { day: string; type: string; time: string }) => {
+    if (!user?.id) return;
+
+    try {
+      console.log('Updating pickup:', id, pickupData);
+      
+      const { data, error } = await supabase
+        .from('daily_pickup')
+        .update({
+          day: pickupData.day,
+          type: pickupData.type,
+          time: pickupData.time
+        })
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      
+      console.log('Pickup updated successfully:', data);
+      setPickups(prev => prev.map(p => p.id === id ? data : p));
+      
+      showNotification({
+        message: 'Pickup updated successfully!',
+        type: 'success',
+        duration: 3000
+      });
+    } catch (error: any) {
+      console.error('Error updating pickup:', error.message);
+      showNotification({
+        message: error.message || 'Failed to update pickup',
+        type: 'error',
+        duration: 3000
+      });
+    }
+  }, [user?.id, showNotification]);
+
+  // Delete pickup from Supabase
+  const deletePickup = useCallback(async (id: number) => {
+    if (!user?.id) return;
+
+    try {
+      console.log('Deleting pickup:', id);
+      
+      const { error } = await supabase
+        .from('daily_pickup')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+      
+      console.log('Pickup deleted successfully');
+      setPickups(prev => prev.filter(p => p.id !== id));
+      
+      showNotification({
+        message: 'Pickup cancelled successfully!',
+        type: 'warning',
+        duration: 3000
+      });
+    } catch (error: any) {
+      console.error('Error deleting pickup:', error.message);
+      showNotification({
+        message: error.message || 'Failed to cancel pickup',
+        type: 'error',
+        duration: 3000
+      });
+    }
+  }, [user?.id, showNotification]);
+
+  // Load dashboard visibility from localStorage
   useEffect(() => {
-    const loadPickups = () => {
-      try {
-        setIsLoading(true);
-        const savedPickups = localStorage.getItem(PICKUPS_STORAGE_KEY);
-        if (savedPickups) {
-          const parsedPickups = JSON.parse(savedPickups);
-          setPickups(parsedPickups);
-        } else {
-          const defaultPickups = [
-            { id: 1, day: 'Tomorrow', type: 'Paper', time: '9:00 AM' },
-            { id: 2, day: 'Friday', type: 'Plastic', time: '10:30 AM' },
-            { id: 3, day: 'Monday', type: 'Metal', time: '8:30 AM' },
-          ];
-          setPickups(defaultPickups);
-          localStorage.setItem(PICKUPS_STORAGE_KEY, JSON.stringify(defaultPickups));
+    const savedVisibility = localStorage.getItem('dashboard_visibility_settings');
+    if (savedVisibility) {
+      setDashboardVisibility(JSON.parse(savedVisibility));
+    }
+  }, []);
+
+  // Listen for visibility changes from settings
+  useEffect(() => {
+    const handleVisibilityChange = (event: CustomEvent) => {
+      setDashboardVisibility(event.detail);
+    };
+
+    window.addEventListener('dashboard-visibility-changed', handleVisibilityChange as EventListener);
+    
+    return () => {
+      window.removeEventListener('dashboard-visibility-changed', handleVisibilityChange as EventListener);
+    };
+  }, []);
+
+  // Load pickups on mount and when user changes
+  useEffect(() => {
+    if (user?.id) {
+      loadPickups();
+    }
+  }, [user?.id, loadPickups]);
+
+  // Set up real-time subscription
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel('daily_pickup_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'daily_pickup',
+          filter: `user_id=eq.${user.id}`
+        },
+        (payload) => {
+          console.log('Realtime update received:', payload);
+          loadPickups();
+          setShowLiveIndicator(true);
+          setTimeout(() => setShowLiveIndicator(false), 3000);
         }
-      } catch (error) {
-        console.error('Error loading pickups:', error);
-      } finally {
-        setIsLoading(false);
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, loadPickups]);
+
+  // Handle tab visibility
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      const now = Date.now();
+      const timeSinceLastActive = now - lastActiveTime;
+      
+      if (document.visibilityState === 'visible') {
+        if (timeSinceLastActive > 2 * 60 * 1000) {
+          window.location.reload();
+          return;
+        }
+        
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          window.location.reload();
+          return;
+        }
+        
+        await refreshData();
+        await loadPickups();
+        setLastActiveTime(now);
+        setShowLiveIndicator(true);
+        setTimeout(() => setShowLiveIndicator(false), 2000);
+      } else {
+        setLastActiveTime(now);
       }
     };
 
-    loadPickups();
-  }, []);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [refreshData, loadPickups, lastActiveTime]);
 
-  useEffect(() => {
-    if (!isLoading) {
-      localStorage.setItem(PICKUPS_STORAGE_KEY, JSON.stringify(pickups));
-    }
-  }, [pickups, isLoading]);
-
+  // Check screen size for mobile
   useEffect(() => {
     const checkScreenSize = () => {
-      setIsMobile(window.innerWidth < 640);
+      setIsMobile(window.innerWidth < 1024);
     };
-    
     checkScreenSize();
     window.addEventListener('resize', checkScreenSize);
     return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
+  // Show live indicator briefly
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 60000);
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    if (lastUpdate) {
-      setShowLiveIndicator(true);
-      const timer = setTimeout(() => {
-        setShowLiveIndicator(false);
-      }, 3000);
+    if (showLiveIndicator) {
+      const timer = setTimeout(() => setShowLiveIndicator(false), 3000);
       return () => clearTimeout(timer);
     }
-  }, [lastUpdate]);
+  }, [showLiveIndicator]);
 
+  // Update last active time periodically
   useEffect(() => {
-    if (error) {
-      showNotification({
-        message: `Error loading data: ${error}`,
-        type: 'error',
-        duration: 5000
-      });
-    }
-  }, [error, showNotification]);
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        setLastActiveTime(Date.now());
+      }
+    }, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
+  // Calculate totals for chart
   const totals = useMemo(() => {
     const paper = wasteRecords.reduce((sum, r) => sum + (r.paper || 0), 0);
     const plastic = wasteRecords.reduce((sum, r) => sum + (r.plastic || 0), 0);
@@ -670,67 +488,43 @@ export default function DashboardPage() {
     return { paper, plastic, metal, grand };
   }, [wasteRecords]);
 
-  const averages = useMemo(() => {
-    const count = wasteRecords.length || 1;
-    return {
-      paper: totals.paper / count,
-      plastic: totals.plastic / count,
-      metal: totals.metal / count,
-      perDay: totals.grand / count
-    };
-  }, [wasteRecords.length, totals]);
-
   const todayData = useMemo(() => {
     const found = wasteRecords.find(r => r.date === selectedDate);
-    return found || { id: 0, date: selectedDate, paper: 0, plastic: 0, metal: 0, total: 0 };
+    return found || { paper: 0, plastic: 0, metal: 0, total: 0 };
   }, [wasteRecords, selectedDate]);
 
   const metrics = useMemo(() => [
-    { label: 'Total Today', value: `${todayData.total} kg`, color: 'teal', icon: Target, data: todayData.total },
     { label: 'Paper Today', value: `${todayData.paper} kg`, color: 'blue', icon: FileText, data: todayData.paper },
     { label: 'Plastic Today', value: `${todayData.plastic} kg`, color: 'yellow', icon: Package, data: todayData.plastic },
     { label: 'Metal Today', value: `${todayData.metal} kg`, color: 'purple', icon: Recycle, data: todayData.metal },
   ], [todayData]);
 
   const chartData = useMemo(() => wasteRecords.slice(0, 7), [wasteRecords]);
-  
   const maxValue = useMemo(() => 
     chartData.length > 0 
-      ? Math.max(...chartData.flatMap(d => [(d.paper || 0), (d.plastic || 0), (d.metal || 0)]))
+      ? Math.max(...chartData.flatMap(d => [d.paper || 0, d.plastic || 0, d.metal || 0]))
       : 1
   , [chartData]);
 
-  const getGreeting = useCallback(() => {
-    const hour = currentTime.getHours();
-    if (hour < 12) return 'Good morning';
-    if (hour < 18) return 'Good afternoon';
-    return 'Good evening';
-  }, [currentTime]);
-
-  const getAdminName = useCallback(() => {
-    if (!user?.email) return 'Admin';
-    const name = user.email.split('@')[0];
-    return name.charAt(0).toUpperCase() + name.slice(1);
-  }, [user?.email]);
-
-  const openAddModal = useCallback(() => {
+  // Modal handlers
+  const openAddModal = () => {
     setEditingPickup(null);
     setFormData({ day: '', type: '', time: '' });
     setIsModalOpen(true);
-  }, []);
+  };
 
-  const openEditModal = useCallback((pickup: Pickup) => {
+  const openEditModal = (pickup: Pickup) => {
     setEditingPickup(pickup);
     setFormData({ day: pickup.day, type: pickup.type, time: pickup.time });
     setIsModalOpen(true);
-  }, []);
+  };
 
-  const closeModal = useCallback(() => {
+  const closeModal = () => {
     setIsModalOpen(false);
     setEditingPickup(null);
-  }, []);
+  };
 
-  const handleSubmit = useCallback((data: { day: string; type: string; time: string }) => {
+  const handleSubmit = useCallback(async (data: { day: string; type: string; time: string }) => {
     if (!data.day || !data.type || !data.time) {
       showNotification({
         message: 'Please fill all fields before saving',
@@ -740,56 +534,81 @@ export default function DashboardPage() {
       return;
     }
 
-    let updatedPickups: Pickup[];
-
-    if (editingPickup) {
-      updatedPickups = pickups.map(p => p.id === editingPickup.id ? { ...p, ...data } : p);
-      
-      window.dispatchEvent(new CustomEvent('pickup-updated', {
-        detail: { day: data.day, type: data.type, time: data.time, oldDay: editingPickup.day }
-      }));
-      
-      showNotification({ message: 'Pickup updated successfully!', type: 'success', duration: 3000 });
-    } else {
-      const newId = Math.max(0, ...pickups.map(p => p.id)) + 1;
-      updatedPickups = [...pickups, { id: newId, ...data }];
-      
-      window.dispatchEvent(new CustomEvent('pickup-scheduled', {
-        detail: { day: data.day, type: data.type, time: data.time }
-      }));
-      
-      showNotification({ message: 'Pickup added successfully!', type: 'success', duration: 3000 });
+    try {
+      if (editingPickup) {
+        await updatePickup(editingPickup.id, data);
+      } else {
+        await addPickup(data);
+      }
+      closeModal();
+    } catch (error) {
+      // Error already handled in functions
     }
-    
-    setPickups(updatedPickups);
-    closeModal();
-  }, [editingPickup, pickups, showNotification, closeModal]);
+  }, [editingPickup, addPickup, updatePickup, showNotification, closeModal]);
 
   const handleDelete = useCallback((id: number) => {
-    const deletedPickup = pickups.find(p => p.id === id);
-    
+    const pickup = pickups.find(p => p.id === id);
     confirm({
-      title: 'Delete Pickup',
-      message: 'Are you sure you want to delete this pickup? This action cannot be undone.',
-      confirmText: 'Delete',
-      cancelText: 'Cancel',
+      title: 'Cancel Pickup',
+      message: `Are you sure you want to cancel the pickup scheduled for ${pickup?.day}?`,
+      confirmText: 'Yes, Cancel',
+      cancelText: 'No, Keep',
       type: 'warning',
-      onConfirm: () => {
-        const updatedPickups = pickups.filter(p => p.id !== id);
-        setPickups(updatedPickups);
-        
-        if (deletedPickup) {
-          window.dispatchEvent(new CustomEvent('pickup-deleted', {
-            detail: { day: deletedPickup.day, type: deletedPickup.type, time: deletedPickup.time }
-          }));
-          
-          showNotification({ message: `Pickup for ${deletedPickup.day} deleted successfully!`, type: 'warning', duration: 3000 });
-        }
-      }
+      onConfirm: () => deletePickup(id)
     });
-  }, [pickups, confirm, showNotification]);
+  }, [pickups, confirm, deletePickup]);
 
-  if (isLoading || isWasteDataLoading) {
+  const handleManualRefresh = async () => {
+    await refreshData();
+    await loadPickups();
+    setShowLiveIndicator(true);
+    showNotification({
+      message: 'Data refreshed successfully!',
+      type: 'success',
+      duration: 2000
+    });
+  };
+
+  // Get current date for display
+  const currentDate = new Date().toLocaleDateString('en-US', { 
+    weekday: 'long', 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric' 
+  });
+
+  // Pie slice data for tooltips
+  const pieSlices = [
+    { 
+      name: 'Paper', 
+      value: totals.paper, 
+      percentage: ((totals.paper / totals.grand) * 100 || 0).toFixed(1),
+      color: '#3B82F6',
+      hoverColor: '#2563EB',
+      icon: FileText,
+      dateRange: 'All time'
+    },
+    { 
+      name: 'Plastic', 
+      value: totals.plastic, 
+      percentage: ((totals.plastic / totals.grand) * 100 || 0).toFixed(1),
+      color: '#EAB308',
+      hoverColor: '#CA8A04',
+      icon: Package,
+      dateRange: 'All time'
+    },
+    { 
+      name: 'Metal', 
+      value: totals.metal, 
+      percentage: ((totals.metal / totals.grand) * 100 || 0).toFixed(1),
+      color: '#A855F7',
+      hoverColor: '#9333EA',
+      icon: Recycle,
+      dateRange: 'All time'
+    }
+  ];
+
+  if (isWasteDataLoading && wasteRecords.length === 0) {
     return (
       <AuthGuard>
         <ProtectedLayout activeMenu="dashboard">
@@ -804,65 +623,510 @@ export default function DashboardPage() {
     );
   }
 
-  const DesktopView = () => (
-    <div className="space-y-8 animate-fade-in">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-teal-100 rounded-lg">
-            <LayoutDashboard size={28} className="text-teal-600" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-            <p className="text-sm text-gray-500 mt-1">Overview of your recycling activities</p>
-          </div>
-        </div>
-      </div>
-
-      <MetricsCards metrics={metrics} />
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <ChartSection 
-          selectedChartType={selectedChartType}
-          setSelectedChartType={setSelectedChartType}
-          selectedDate={selectedDate}
-          chartData={chartData}
-          maxValue={maxValue}
-          todayData={todayData}
-        />
-
-        <PickupsSection 
-          pickups={pickups}
-          onEdit={openEditModal}
-          onDelete={handleDelete}
-          onAdd={openAddModal}
-        />
-      </div>
-
-      <MaterialBreakdown totals={totals} />
-    </div>
-  );
-
   return (
     <AuthGuard>
       <ProtectedLayout activeMenu="dashboard">
-        {isMobile ? (
-          <MobileViewComponent 
-            metrics={metrics}
-            chartData={chartData}
-            maxValue={maxValue}
-            todayData={todayData}
-            pickups={pickups}
-            totals={totals}
-            selectedChartType={selectedChartType}
-            setSelectedChartType={setSelectedChartType}
-            onEdit={openEditModal}
-            onDelete={handleDelete}
-            onAdd={openAddModal}
-          />
-        ) : (
-          <DesktopView />
+        <div className="flex flex-col lg:flex-row min-h-screen">
+          {/* Main Content Area - Scrollable */}
+          <div className="flex-1 min-w-0 px-3 sm:px-4 md:px-5 lg:px-6 xl:px-8 py-4 sm:py-5 md:py-6">
+            {/* Header - Removed the title and description, only kept refresh and live indicator */}
+            <div className="flex flex-col sm:flex-row justify-end items-end gap-4 mb-6">
+              <div className="flex items-center gap-3">
+                {showLiveIndicator && (
+                  <div className="flex items-center gap-2 bg-green-100 text-green-700 px-3 py-1.5 rounded-full animate-pulse shadow-sm">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <span className="text-xs font-medium">Live</span>
+                  </div>
+                )}
+                <button
+                  onClick={handleManualRefresh}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:text-teal-600 transition-colors rounded-xl hover:bg-gray-100"
+                >
+                  <RefreshCw size={14} />
+                  Refresh
+                </button>
+              </div>
+            </div>
+
+            {/* Metrics Cards - Conditionally rendered */}
+            {dashboardVisibility.showMetricsCards && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                {metrics.map((metric, idx) => {
+                  const Icon = metric.icon;
+                  const colors = getColorClasses(metric.color);
+                  return (
+                    <div key={idx} className={`bg-white rounded-xl shadow-md p-4 border-l-4 ${colors.border} hover:shadow-lg transition-all duration-300 hover:-translate-y-0.5`}>
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="text-xs text-gray-500">{metric.label}</p>
+                          <p className="text-2xl font-bold text-gray-900 mt-1">{metric.value}</p>
+                        </div>
+                        <div className={`p-2 rounded-lg ${colors.bg}`}>
+                          <Icon className={colors.text} size={20} />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Chart Section with Pie Chart - Conditionally rendered */}
+            {dashboardVisibility.showChart && (
+              <div className="bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition-all duration-300">
+                <div className="flex justify-between items-center mb-4">
+                  <div className="flex items-center gap-2">
+                    {selectedChartType === 'bar' ? (
+                      <BarChart3 size={24} className="text-teal-600" />
+                    ) : (
+                      <PieChart size={24} className="text-teal-600" />
+                    )}
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      {selectedChartType === 'bar' ? 'Last 7 Days Trend' : 'Material Composition'}
+                    </h3>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => setSelectedChartType('bar')} className={`p-2 rounded-lg transition-all ${selectedChartType === 'bar' ? 'bg-teal-100 text-teal-600 shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                      <BarChart3 size={18} />
+                    </button>
+                    <button onClick={() => setSelectedChartType('pie')} className={`p-2 rounded-lg transition-all ${selectedChartType === 'pie' ? 'bg-teal-100 text-teal-600 shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                      <PieChart size={18} />
+                    </button>
+                  </div>
+                </div>
+                
+                {selectedChartType === 'bar' ? (
+                  <div className="relative">
+                    {/* Tooltip for bar chart - shows on hover (desktop) or tap (mobile) */}
+                    {(hoveredBar || selectedBar) && (
+                      <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-full bg-gray-900 text-white px-4 py-2 rounded-lg shadow-lg z-10 text-xs mb-2 whitespace-nowrap">
+                        <div className="font-semibold mb-1">{hoveredBar?.date || selectedBar?.date}</div>
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                            <span>Paper: {(hoveredBar?.paper || selectedBar?.paper || 0).toFixed(1)} kg</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                            <span>Plastic: {(hoveredBar?.plastic || selectedBar?.plastic || 0).toFixed(1)} kg</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                            <span>Metal: {(hoveredBar?.metal || selectedBar?.metal || 0).toFixed(1)} kg</span>
+                          </div>
+                          <div className="border-t border-gray-700 my-1 pt-1">
+                            <span className="font-semibold">Total: {((hoveredBar?.paper || selectedBar?.paper || 0) + (hoveredBar?.plastic || selectedBar?.plastic || 0) + (hoveredBar?.metal || selectedBar?.metal || 0)).toFixed(1)} kg</span>
+                          </div>
+                        </div>
+                        <div className="text-[10px] text-gray-400 mt-1 text-center">As of {currentDate}</div>
+                      </div>
+                    )}
+                    <div className="h-80 flex items-end justify-between gap-2">
+                      {chartData.map((data, idx) => {
+                        const maxH = 240;
+                        const paperH = ((data.paper || 0) / maxValue) * maxH;
+                        const plasticH = ((data.plastic || 0) / maxValue) * maxH;
+                        const metalH = ((data.metal || 0) / maxValue) * maxH;
+                        return (
+                          <div 
+                            key={idx} 
+                            className="flex-1 flex flex-col items-center gap-2 group"
+                            onMouseEnter={() => setHoveredBar({
+                              date: data.date,
+                              paper: data.paper || 0,
+                              plastic: data.plastic || 0,
+                              metal: data.metal || 0
+                            })}
+                            onMouseLeave={() => setHoveredBar(null)}
+                            onClick={() => {
+                              // For mobile - toggle selection on tap
+                              if (selectedBar?.date === data.date) {
+                                setSelectedBar(null);
+                              } else {
+                                setSelectedBar({
+                                  date: data.date,
+                                  paper: data.paper || 0,
+                                  plastic: data.plastic || 0,
+                                  metal: data.metal || 0
+                                });
+                                // Auto hide after 3 seconds on mobile
+                                if (isMobile) {
+                                  setTimeout(() => setSelectedBar(null), 3000);
+                                }
+                              }
+                            }}
+                          >
+                            <div className="flex justify-center gap-1 items-end w-full cursor-pointer">
+                              <div 
+                                className="flex-1 max-w-[30px] bg-blue-500 rounded-t transition-all group-hover:bg-blue-600 group-hover:scale-110" 
+                                style={{ height: `${paperH}px` }}
+                              />
+                              <div 
+                                className="flex-1 max-w-[30px] bg-yellow-500 rounded-t transition-all group-hover:bg-yellow-600 group-hover:scale-110" 
+                                style={{ height: `${plasticH}px` }}
+                              />
+                              <div 
+                                className="flex-1 max-w-[30px] bg-purple-500 rounded-t transition-all group-hover:bg-purple-600 group-hover:scale-110" 
+                                style={{ height: `${metalH}px` }}
+                              />
+                            </div>
+                            <div className="text-xs text-gray-500 group-hover:text-teal-600 transition-colors font-medium">{data.date?.slice(5)}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="h-80 flex items-center justify-center">
+                    <div className="relative w-64 h-64">
+                      {/* Tooltip - shows when hovering over pie slices (desktop) or tapping (mobile) */}
+                      {(hoveredSlice || selectedSlice) && (
+                        <div className="absolute -top-14 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-4 py-2 rounded-lg shadow-lg z-10 whitespace-nowrap text-xs flex flex-col items-center">
+                          <span className="font-semibold">{(hoveredSlice || selectedSlice)?.split(':')[0]}</span>
+                          <span>{(hoveredSlice || selectedSlice)?.split(':')[1]}</span>
+                        </div>
+                      )}
+                      
+                      <svg viewBox="0 0 100 100" className="transform -rotate-90 w-full h-full">
+                        {/* Paper slice */}
+                        <g
+                          onMouseEnter={() => {
+                            const percentage = ((totals.paper / totals.grand) * 100 || 0).toFixed(1);
+                            setHoveredSlice(`Paper: ${totals.paper.toFixed(1)} kg (${percentage}%) | As of ${currentDate}`);
+                          }}
+                          onMouseLeave={() => setHoveredSlice(null)}
+                          onClick={() => {
+                            const percentage = ((totals.paper / totals.grand) * 100 || 0).toFixed(1);
+                            const sliceText = `Paper: ${totals.paper.toFixed(1)} kg (${percentage}%) | As of ${currentDate}`;
+                            if (selectedSlice === sliceText) {
+                              setSelectedSlice(null);
+                            } else {
+                              setSelectedSlice(sliceText);
+                              if (isMobile) {
+                                setTimeout(() => setSelectedSlice(null), 3000);
+                              }
+                            }
+                          }}
+                          className="cursor-pointer transition-all duration-300"
+                        >
+                          <circle 
+                            cx="50" 
+                            cy="50" 
+                            r="40" 
+                            fill="none" 
+                            stroke="#3B82F6" 
+                            strokeWidth="20" 
+                            strokeDasharray={`${(totals.paper / totals.grand || 0) * 251.2} 251.2`} 
+                            className="transition-all duration-300 hover:stroke-blue-700 hover:stroke-width-24"
+                          />
+                        </g>
+                        
+                        {/* Plastic slice */}
+                        <g
+                          onMouseEnter={() => {
+                            const percentage = ((totals.plastic / totals.grand) * 100 || 0).toFixed(1);
+                            setHoveredSlice(`Plastic: ${totals.plastic.toFixed(1)} kg (${percentage}%) | As of ${currentDate}`);
+                          }}
+                          onMouseLeave={() => setHoveredSlice(null)}
+                          onClick={() => {
+                            const percentage = ((totals.plastic / totals.grand) * 100 || 0).toFixed(1);
+                            const sliceText = `Plastic: ${totals.plastic.toFixed(1)} kg (${percentage}%) | As of ${currentDate}`;
+                            if (selectedSlice === sliceText) {
+                              setSelectedSlice(null);
+                            } else {
+                              setSelectedSlice(sliceText);
+                              if (isMobile) {
+                                setTimeout(() => setSelectedSlice(null), 3000);
+                              }
+                            }
+                          }}
+                          className="cursor-pointer transition-all duration-300"
+                        >
+                          <circle 
+                            cx="50" 
+                            cy="50" 
+                            r="40" 
+                            fill="none" 
+                            stroke="#EAB308" 
+                            strokeWidth="20" 
+                            strokeDasharray={`${(totals.plastic / totals.grand || 0) * 251.2} 251.2`} 
+                            strokeDashoffset={`-${(totals.paper / totals.grand || 0) * 251.2}`}
+                            className="transition-all duration-300 hover:stroke-yellow-600 hover:stroke-width-24"
+                          />
+                        </g>
+                        
+                        {/* Metal slice */}
+                        <g
+                          onMouseEnter={() => {
+                            const percentage = ((totals.metal / totals.grand) * 100 || 0).toFixed(1);
+                            setHoveredSlice(`Metal: ${totals.metal.toFixed(1)} kg (${percentage}%) | As of ${currentDate}`);
+                          }}
+                          onMouseLeave={() => setHoveredSlice(null)}
+                          onClick={() => {
+                            const percentage = ((totals.metal / totals.grand) * 100 || 0).toFixed(1);
+                            const sliceText = `Metal: ${totals.metal.toFixed(1)} kg (${percentage}%) | As of ${currentDate}`;
+                            if (selectedSlice === sliceText) {
+                              setSelectedSlice(null);
+                            } else {
+                              setSelectedSlice(sliceText);
+                              if (isMobile) {
+                                setTimeout(() => setSelectedSlice(null), 3000);
+                              }
+                            }
+                          }}
+                          className="cursor-pointer transition-all duration-300"
+                        >
+                          <circle 
+                            cx="50" 
+                            cy="50" 
+                            r="40" 
+                            fill="none" 
+                            stroke="#A855F7" 
+                            strokeWidth="20" 
+                            strokeDasharray={`${(totals.metal / totals.grand || 0) * 251.2} 251.2`} 
+                            strokeDashoffset={`-${((totals.paper + totals.plastic) / totals.grand || 0) * 251.2}`}
+                            className="transition-all duration-300 hover:stroke-purple-600 hover:stroke-width-24"
+                          />
+                        </g>
+                      </svg>
+                      
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-gray-800">{totals.grand.toFixed(1)}</p>
+                          <p className="text-xs text-gray-500">Total kg</p>
+                          <p className="text-[10px] text-gray-400 mt-1">{currentDate.split(',')[0]}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {selectedChartType === 'bar' ? (
+                  <div className="flex justify-center gap-8 mt-6 pt-2">
+                    <div className="flex items-center gap-2"><div className="w-3 h-3 bg-blue-500 rounded-full"></div><span className="text-sm font-medium text-gray-700">Paper</span></div>
+                    <div className="flex items-center gap-2"><div className="w-3 h-3 bg-yellow-500 rounded-full"></div><span className="text-sm font-medium text-gray-700">Plastic</span></div>
+                    <div className="flex items-center gap-2"><div className="w-3 h-3 bg-purple-500 rounded-full"></div><span className="text-sm font-medium text-gray-700">Metal</span></div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 gap-4 mt-6 pt-2 max-w-md mx-auto">
+                    {pieSlices.map((slice, idx) => {
+                      const Icon = slice.icon;
+                      const sliceText = `${slice.name}: ${slice.value.toFixed(1)} kg (${slice.percentage}%) | As of ${currentDate}`;
+                      return (
+                        <div 
+                          key={idx} 
+                          className="flex flex-col items-center gap-1 cursor-pointer transition-all duration-300 hover:scale-105"
+                          onMouseEnter={() => setHoveredSlice(sliceText)}
+                          onMouseLeave={() => setHoveredSlice(null)}
+                          onClick={() => {
+                            if (selectedSlice === sliceText) {
+                              setSelectedSlice(null);
+                            } else {
+                              setSelectedSlice(sliceText);
+                              if (isMobile) {
+                                setTimeout(() => setSelectedSlice(null), 3000);
+                              }
+                            }
+                          }}
+                        >
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: slice.color }}></div>
+                          <span className="text-xs font-medium text-gray-700">{slice.name}</span>
+                          <span className="text-sm font-bold" style={{ color: slice.color }}>{slice.percentage}%</span>
+                          <span className="text-xs text-gray-500">{slice.value.toFixed(1)} kg</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Static Sidebar - Stays in place when scrolling - Conditionally rendered */}
+          {dashboardVisibility.showPickupsSidebar && !isMobile && (
+            <div className="w-80 flex-shrink-0 hidden lg:block">
+              <div className="fixed top-24 w-80">
+                <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+                  {/* Header */}
+                  <div className="bg-gradient-to-r from-teal-500 to-teal-600 px-4 py-3.5">
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-1.5 bg-white/20 rounded-xl backdrop-blur-sm">
+                          <Truck size={16} className="text-white" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-bold text-white">Upcoming Pickups</h3>
+                          <p className="text-[10px] text-white/80">{pickups.length} scheduled</p>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={openAddModal} 
+                        className="px-2.5 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-[11px] font-medium text-white transition-all duration-300 flex items-center gap-1"
+                      >
+                        <Plus size={11} />
+                        Add
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Body */}
+                  <div className="p-3">
+                    <div className="space-y-2 max-h-[calc(100vh-250px)] overflow-y-auto">
+                      {isLoading && pickups.length === 0 ? (
+                        Array(4).fill(0).map((_, i) => (
+                          <div key={i} className="animate-pulse">
+                            <div className="h-14 bg-gray-100 rounded-xl"></div>
+                          </div>
+                        ))
+                      ) : pickups.length > 0 ? (
+                        pickups.map((item) => {
+                          const getTypeIcon = (type: string) => {
+                            switch(type) {
+                              case 'Paper': return <FileText size={12} className="text-blue-500" />;
+                              case 'Plastic': return <Package size={12} className="text-yellow-500" />;
+                              case 'Metal': return <Recycle size={12} className="text-purple-500" />;
+                              default: return <Package size={12} className="text-gray-500" />;
+                            }
+                          };
+                          
+                          const getTypeColor = (type: string) => {
+                            switch(type) {
+                              case 'Paper': return 'bg-blue-50 border-blue-100';
+                              case 'Plastic': return 'bg-yellow-50 border-yellow-100';
+                              case 'Metal': return 'bg-purple-50 border-purple-100';
+                              default: return 'bg-gray-50 border-gray-100';
+                            }
+                          };
+                          
+                          return (
+                            <div 
+                              key={item.id} 
+                              className={`group relative rounded-xl p-2.5 border transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 ${getTypeColor(item.type)}`}
+                            >
+                              <div className="flex items-start justify-between">
+                                <div className="flex items-start gap-2 flex-1">
+                                  <div className="min-w-[52px]">
+                                    <div className="px-1.5 py-0.5 bg-white rounded-md text-center shadow-sm">
+                                      <p className="text-[10px] font-bold text-gray-800">{item.day}</p>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-1 mb-0.5">
+                                      {getTypeIcon(item.type)}
+                                      <p className="text-[11px] font-semibold text-gray-800">{item.type}</p>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <Clock size={9} className="text-gray-400" />
+                                      <p className="text-[9px] text-gray-500">{item.time}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                                
+                                <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-all duration-300">
+                                  <button 
+                                    onClick={() => openEditModal(item)} 
+                                    className="p-1 text-blue-500 hover:bg-white rounded-md transition-all hover:scale-110"
+                                  >
+                                    <Edit size={10} />
+                                  </button>
+                                  <button 
+                                    onClick={() => handleDelete(item.id)} 
+                                    className="p-1 text-red-500 hover:bg-white rounded-md transition-all hover:scale-110"
+                                  >
+                                    <Trash2 size={10} />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="text-center py-8">
+                          <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                            <Truck size={16} className="text-gray-300" />
+                          </div>
+                          <p className="text-gray-500 text-xs">No pickups scheduled</p>
+                          <button 
+                            onClick={openAddModal} 
+                            className="mt-2 text-teal-600 text-[10px] font-medium hover:underline inline-flex items-center gap-1"
+                          >
+                            <Plus size={10} />
+                            Schedule pickup
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Footer */}
+                    {pickups.length > 0 && (
+                      <div className="mt-3 pt-2 border-t border-gray-100">
+                        <div className="flex items-center justify-between text-[9px]">
+                          <div className="flex items-center gap-1 text-gray-500">
+                            <MapPin size={9} />
+                            <span>{pickups.length} pickup{pickups.length !== 1 ? 's' : ''}</span>
+                          </div>
+                          <div className="flex items-center gap-1 text-teal-600">
+                            <CheckCircle size={9} />
+                            <span>Ready</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Mobile Pickups Section */}
+        {isMobile && dashboardVisibility.showPickupsSidebar && (
+          <div className="px-3 sm:px-4 md:px-5 lg:px-6 xl:px-8 py-4">
+            <div className="bg-white rounded-xl shadow-md p-4">
+              <div className="flex justify-between items-center mb-4">
+                <div className="flex items-center gap-2">
+                  <Truck size={20} className="text-teal-600" />
+                  <h3 className="text-base font-semibold text-gray-900">Upcoming Pickups</h3>
+                </div>
+                <button onClick={openAddModal} className="px-3 py-1.5 bg-teal-50 text-teal-600 rounded-lg text-sm font-medium">
+                  <Plus size={14} /> Add
+                </button>
+              </div>
+              <div className="space-y-2">
+                {pickups.length > 0 ? (
+                  pickups.map((item) => {
+                    const getTypeIcon = (type: string) => {
+                      switch(type) {
+                        case 'Paper': return <FileText size={14} className="text-blue-500" />;
+                        case 'Plastic': return <Package size={14} className="text-yellow-500" />;
+                        case 'Metal': return <Recycle size={14} className="text-purple-500" />;
+                        default: return <Package size={14} className="text-gray-500" />;
+                      }
+                    };
+                    
+                    return (
+                      <div key={item.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div>
+                          <p className="text-sm font-medium">{item.day}</p>
+                          <p className="text-xs text-gray-500">{item.type} • {item.time}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => openEditModal(item)} className="text-blue-500"><Edit size={14} /></button>
+                          <button onClick={() => handleDelete(item.id)} className="text-red-500"><Trash2 size={14} /></button>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="text-center text-gray-500 py-4">No pickups scheduled</p>
+                )}
+              </div>
+            </div>
+          </div>
         )}
 
+        {/* Pickup Modal */}
         <PickupModal 
           isOpen={isModalOpen}
           onClose={closeModal}

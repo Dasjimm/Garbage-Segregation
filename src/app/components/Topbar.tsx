@@ -1,7 +1,7 @@
 'use client';
 
 import { useSupabaseAuth } from '@/app/context/SupabaseAuthContext';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useState, useEffect, useRef } from 'react';
 import {
   Bell,
@@ -18,9 +18,15 @@ import {
   Menu,
   X,
   LogIn,
-  Shield,
   Clock,
-  Zap
+  Zap,
+  User,
+  LayoutDashboard,
+  Activity,
+  Wifi,
+  Recycle,
+  BarChart3,
+  Truck
 } from 'lucide-react';
 import Image from 'next/image';
 import AuthModal from '@/app/components/AuthModal';
@@ -39,6 +45,7 @@ interface Notification {
 export default function Topbar() {
   const { user, logout, isAuthenticated } = useSupabaseAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -54,6 +61,57 @@ export default function Topbar() {
   
   const userMenuRef = useRef<HTMLDivElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
+
+  // Get page title based on current path
+  const getPageTitle = () => {
+    const path = pathname || '/';
+    
+    if (path === '/dashboard') return 'Dashboard';
+    if (path === '/reports') return 'Reports';
+    if (path === '/settings') return 'Settings';
+    if (path === '/recycling') return 'Recycling';
+    if (path === '/profile') return 'Profile';
+    if (path === '/analytics') return 'Analytics';
+    if (path === '/pickups') return 'Pickups';
+    
+    // Handle sub-routes
+    if (path.startsWith('/settings')) return 'Settings';
+    if (path.startsWith('/reports')) return 'Reports';
+    
+    return 'Dashboard';
+  };
+
+  // Get page description based on current path
+  const getPageDescription = () => {
+    const path = pathname || '/';
+    
+    if (path === '/dashboard') return 'Overview of your recycling activities and performance metrics';
+    if (path === '/reports') return 'View and analyze your recycling data and generate reports';
+    if (path === '/settings') return 'Configure system preferences, notifications, and account settings';
+    if (path === '/recycling') return 'Track and manage your recycling processes and waste disposal';
+    if (path === '/profile') return 'Manage your personal information and account details';
+    if (path === '/analytics') return 'Advanced analytics and insights for your recycling data';
+    if (path === '/pickups') return 'Schedule and manage your waste collection pickups';
+    
+    // Handle sub-routes
+    if (path.startsWith('/settings')) return 'Configure system preferences, notifications, and account settings';
+    if (path.startsWith('/reports')) return 'View and analyze your recycling data and generate reports';
+    
+    return 'Manage your recycling activities and track performance';
+  };
+
+  // Get icon for current page
+  const getPageIcon = () => {
+    const path = pathname || '/';
+    if (path === '/dashboard') return <LayoutDashboard size={22} className="text-white/80" />;
+    if (path === '/reports') return <FileText size={22} className="text-white/80" />;
+    if (path === '/settings') return <Settings size={22} className="text-white/80" />;
+    if (path === '/recycling') return <Recycle size={22} className="text-white/80" />;
+    if (path === '/profile') return <User size={22} className="text-white/80" />;
+    if (path === '/analytics') return <BarChart3 size={22} className="text-white/80" />;
+    if (path === '/pickups') return <Truck size={22} className="text-white/80" />;
+    return <LayoutDashboard size={22} className="text-white/80" />;
+  };
 
   useEffect(() => {
     const savedNotifications = localStorage.getItem('notifications');
@@ -360,8 +418,9 @@ export default function Topbar() {
 
   return (
     <>
-      <header className={`fixed top-0 right-0 h-16 bg-gradient-to-r from-teal-600 via-teal-500 to-emerald-500 text-white shadow-md z-20 transition-all duration-300 ${getLeftPosition()}`}>
+      <header className={`fixed top-0 right-0 h-20 bg-gradient-to-r from-teal-600 via-teal-500 to-emerald-500 text-white shadow-md z-20 transition-all duration-300 ${getLeftPosition()}`}>
         <div className="flex items-center justify-between h-full px-3 sm:px-4 md:px-5 lg:px-6">
+          {/* Left side - Mobile menu button and Page Title with Description */}
           <div className="flex items-center gap-2 sm:gap-3 lg:gap-4">
             {(isMobile || isTablet) && (
               <button
@@ -373,60 +432,25 @@ export default function Topbar() {
               </button>
             )}
             
-            {(isMobile || isTablet) && (
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 relative flex-shrink-0 bg-white/20 rounded-lg overflow-hidden">
-                  <Image
-                    src="/wastelogo.png"
-                    alt="EcoWaste Logo"
-                    width={32}
-                    height={32}
-                    className="object-cover w-full h-full"
-                  />
-                </div>
-                <span className="font-bold text-white text-sm">EcoWaste</span>
+            {/* Page Title with Icon and Description */}
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-white/10 rounded-xl backdrop-blur-sm">
+                {getPageIcon()}
               </div>
-            )}
-            
-            <div className="hidden sm:flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm text-white/90">{getGreeting()},</h2>
-                <p className="text-sm font-semibold text-white">
-                  {getAdminName()}!
+              <div>
+                <h1 className="text-lg sm:text-xl font-bold text-white tracking-tight">
+                  {getPageTitle()}
+                </h1>
+                <p className="text-[10px] sm:text-xs text-white/70 mt-0.5 hidden sm:block">
+                  {getPageDescription()}
                 </p>
-                <div className="bg-white/20 backdrop-blur-sm px-2 py-0.5 rounded-full text-xs flex items-center gap-1">
-                  <Shield size={10} className="text-white" />
-                  <span className="text-white font-medium">Admin</span>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-2 ml-2 border-l border-white/20 pl-3">
-                <div className="flex items-center gap-1 text-xs text-white/90">
-                  <Calendar size={12} className="text-white" />
-                  <span>{currentTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                </div>
-                <div className="flex items-center gap-1 text-xs text-white/90">
-                  <Clock size={12} className="text-white" />
-                  <span>{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 ml-2">
-                <div className="flex items-center gap-1 bg-white/20 backdrop-blur-sm px-2 py-0.5 rounded-full">
-                  <div className={`w-1.5 h-1.5 rounded-full ${hardwareOnline ? 'bg-green-300 animate-pulse' : 'bg-red-300'}`} />
-                  <span className="text-xs text-white font-medium">Online</span>
-                </div>
-                {showLiveIndicator && (
-                  <div className="flex items-center gap-1 bg-yellow-500/20 backdrop-blur-sm px-2 py-0.5 rounded-full animate-pulse">
-                    <Zap size={10} className="text-yellow-300" />
-                    <span className="text-xs text-yellow-100 font-medium">Live</span>
-                  </div>
-                )}
               </div>
             </div>
           </div>
 
+          {/* Right side - Notifications, Status, Date, Time, and User Menu */}
           <div className="flex items-center gap-1 sm:gap-2 lg:gap-3">
+            {/* Notifications */}
             <div className="relative" ref={notificationRef}>
               <button
                 onClick={() => setShowNotifications(!showNotifications)}
@@ -525,25 +549,62 @@ export default function Topbar() {
               )}
             </div>
 
+            {/* Status, Date, Time - Compact pill */}
+            <div className="hidden sm:flex items-center gap-3 px-3 py-1.5 bg-white/10 rounded-full">
+              {/* Online Status */}
+              <div className="flex items-center gap-1">
+                <Wifi size={12} className="text-white/80" />
+                <div className={`w-1.5 h-1.5 rounded-full ${hardwareOnline ? 'bg-green-300 animate-pulse' : 'bg-red-300'}`} />
+                <span className="text-xs text-white/90 font-medium">Online</span>
+              </div>
+              
+              <div className="w-px h-4 bg-white/20"></div>
+              
+              {/* Date and Time */}
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 text-xs text-white/90">
+                  <Calendar size={11} className="text-white/70" />
+                  <span>{currentTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                </div>
+                <div className="flex items-center gap-1 text-xs text-white/90">
+                  <Clock size={11} className="text-white/70" />
+                  <span>{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                </div>
+              </div>
+              
+              {/* Real-time Live Indicator */}
+              {showLiveIndicator && (
+                <>
+                  <div className="w-px h-4 bg-white/20"></div>
+                  <div className="flex items-center gap-1 bg-yellow-500/30 rounded-full px-2 py-0.5 animate-pulse">
+                    <Zap size={10} className="text-yellow-300" />
+                    <span className="text-[10px] text-yellow-100 font-bold">LIVE</span>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* User Menu */}
             {isAuthenticated ? (
               <div className="relative" ref={userMenuRef}>
                 <button
                   onClick={() => setShowUserMenu(!showUserMenu)}
-                  className="flex items-center gap-1 sm:gap-2 hover:bg-white/10 p-1.5 sm:p-2 rounded-lg transition"
+                  className="flex items-center gap-1 sm:gap-2 hover:bg-white/10 p-1.5 sm:p-2 rounded-lg transition group"
                   disabled={isLoggingOut}
                 >
-                  <div className="hidden sm:block text-left">
-                    <p className="text-xs sm:text-sm font-medium text-white truncate max-w-[100px]">
-                      {user?.name || 'User'}
-                    </p>
-                    <p className="text-xs text-white/80 truncate max-w-[100px]">
-                      {user?.email || 'user@example.com'}
+                  <div className="hidden sm:block text-right">
+                    <div className="flex items-center gap-1 justify-end">
+                      <Activity size={10} className="text-white/70" />
+                      <p className="text-[10px] text-white/70">{getGreeting()}</p>
+                    </div>
+                    <p className="text-xs sm:text-sm font-semibold text-white truncate max-w-[100px]">
+                      {user?.name || getAdminName()}
                     </p>
                   </div>
-                  <div className="w-7 h-7 sm:w-8 sm:h-8 bg-white/20 rounded-full flex items-center justify-center text-white font-semibold text-xs sm:text-sm flex-shrink-0">
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 bg-white/20 rounded-full flex items-center justify-center text-white font-semibold text-xs sm:text-sm flex-shrink-0 group-hover:bg-white/30 transition">
                     {user?.name?.charAt(0) || user?.email?.charAt(0) || 'U'}
                   </div>
-                  <ChevronDown size={14} className="text-white/80 hidden sm:block" />
+                  <ChevronDown size={14} className="text-white/80 hidden sm:block group-hover:text-white transition" />
                 </button>
 
                 {showUserMenu && (
@@ -551,7 +612,7 @@ export default function Topbar() {
                     <div className="px-4 py-3 border-b border-gray-200">
                       <div>
                         <p className="text-sm font-medium text-gray-900 truncate">{user?.name || 'User'}</p>
-                        <p className="text-xs text-gray-500 truncate">{user?.email || 'user@example.com'}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">{getGreeting()}</p>
                       </div>
                     </div>
 
@@ -562,9 +623,9 @@ export default function Topbar() {
                           setShowUserMenu(false);
                           setMobileMenuOpen(false);
                         }}
-                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition"
-                        disabled={isLoggingOut}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition flex items-center gap-2"
                       >
+                        <User size={16} />
                         Profile
                       </button>
 
@@ -574,9 +635,9 @@ export default function Topbar() {
                           setShowUserMenu(false);
                           setMobileMenuOpen(false);
                         }}
-                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition"
-                        disabled={isLoggingOut}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition flex items-center gap-2"
                       >
+                        <Settings size={16} />
                         Settings
                       </button>
                     </div>

@@ -17,14 +17,31 @@ import {
   Clock,
   Edit,
   X,
-  Calendar,
-  Lock
+  Calendar, 
+  Lock,
+  Eye,
+  EyeOff,
+  LayoutDashboard,
+  BarChart3,
+  Truck,
+  PieChart
 } from 'lucide-react';
+
 interface ProfileData {
   firstName: string;
   lastName: string;
   email: string;
 }
+
+// Dashboard visibility settings
+interface DashboardVisibility {
+  showMetricsCards: boolean;
+  showChart: boolean;
+  showPickupsSidebar: boolean;
+  showMaterialBreakdown: boolean;
+}
+
+const DASHBOARD_VISIBILITY_KEY = 'dashboard_visibility_settings';
 
 export default function SettingsPage() {
   const { user } = useSupabaseAuth();
@@ -54,6 +71,14 @@ export default function SettingsPage() {
     dailyReports: true,
     weeklyReports: true,
     criticalAlerts: true,
+  });
+
+  // Dashboard visibility state
+  const [dashboardVisibility, setDashboardVisibility] = useState<DashboardVisibility>({
+    showMetricsCards: true,
+    showChart: true,
+    showPickupsSidebar: true,
+    showMaterialBreakdown: true,
   });
 
   useEffect(() => {
@@ -89,6 +114,24 @@ export default function SettingsPage() {
     
     applyNotificationSettings(notificationSettings);
   }, [notificationSettings]);
+
+  // Load dashboard visibility settings from localStorage
+  useEffect(() => {
+    const savedVisibility = localStorage.getItem(DASHBOARD_VISIBILITY_KEY);
+    if (savedVisibility) {
+      setDashboardVisibility(JSON.parse(savedVisibility));
+    }
+  }, []);
+
+  // Save dashboard visibility settings to localStorage and dispatch event
+  useEffect(() => {
+    localStorage.setItem(DASHBOARD_VISIBILITY_KEY, JSON.stringify(dashboardVisibility));
+    
+    // Dispatch event to notify Dashboard page about visibility changes
+    window.dispatchEvent(new CustomEvent('dashboard-visibility-changed', {
+      detail: dashboardVisibility
+    }));
+  }, [dashboardVisibility]);
 
   const applyNotificationSettings = (settings: typeof notificationSettings) => {
     if (settings.dailyReports) {
@@ -308,6 +351,23 @@ export default function SettingsPage() {
     });
   };
 
+  const handleDashboardVisibilityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const { name, checked } = e.target;
+  const newVisibility = { ...dashboardVisibility, [name]: checked };
+  setDashboardVisibility(newVisibility);
+  
+  // Save to localStorage immediately
+  localStorage.setItem('dashboard_visibility_settings', JSON.stringify(newVisibility));
+  
+  showNotification({
+    message: `${name === 'showMetricsCards' ? 'Metrics Cards' : 
+              name === 'showChart' ? 'Chart Section' : 
+              name === 'showPickupsSidebar' ? 'Pickups Sidebar' : 
+              'Material Breakdown'} ${checked ? 'visible' : 'hidden'} on dashboard`,
+    type: 'info',
+    duration: 2000
+  });
+};
   const handleSave = () => {
     setIsSaving(true);
     
@@ -332,19 +392,36 @@ export default function SettingsPage() {
     }, 1000);
   };
 
+  const resetDashboardVisibility = () => {
+    confirm({
+      title: 'Reset Dashboard Visibility',
+      message: 'Are you sure you want to reset all dashboard visibility settings to default?',
+      confirmText: 'Yes, Reset',
+      cancelText: 'Cancel',
+      type: 'warning',
+      onConfirm: () => {
+        setDashboardVisibility({
+          showMetricsCards: true,
+          showChart: true,
+          showPickupsSidebar: true,
+          showMaterialBreakdown: true,
+        });
+        showNotification({
+          message: 'Dashboard visibility reset to default!',
+          type: 'success',
+          duration: 3000
+        });
+      }
+    });
+  };
+
   return (
     <ProtectedLayout activeMenu="settings">
       <div className="w-full overflow-x-hidden animate-fade-in">
         <div className="w-full px-3 sm:px-4 md:px-5 lg:px-6 xl:px-8 py-4 sm:py-5 md:py-6">
           
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 sm:mb-8">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <Settings size={isMobile ? 24 : 28} className="text-teal-600 flex-shrink-0" />
-              <div>
-                <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900">Settings</h1>
-                <p className="text-xs sm:text-sm text-gray-600 mt-1">Configure system preferences and profile</p>
-              </div>
-            </div>
+          {/* Header - Removed title and description, only kept save button */}
+          <div className="flex flex-col sm:flex-row justify-end items-end gap-4 mb-6 sm:mb-8">
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
               {showSuccess && (
                 <div className="bg-green-100 text-green-700 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium flex items-center justify-center gap-2 order-first sm:order-none animate-fade-in">
@@ -376,6 +453,7 @@ export default function SettingsPage() {
             </div>
           </div>
 
+          {/* Test Notifications Section */}
           <div className="bg-white rounded-lg sm:rounded-xl shadow-md p-4 mb-6">
             <h3 className="text-sm font-semibold mb-3">Test Notifications</h3>
             <div className="flex flex-wrap gap-2">
@@ -418,6 +496,7 @@ export default function SettingsPage() {
             </div>
           </div>
 
+          {/* Settings Tabs */}
           <div className="bg-white rounded-lg sm:rounded-xl shadow-md overflow-hidden mb-6">
             <div className="flex border-b border-gray-200 overflow-x-auto hide-scrollbar">
               <button
@@ -443,6 +522,18 @@ export default function SettingsPage() {
                 <Users size={isMobile ? 16 : 18} />
                 <span className={isMobile ? 'sr-only' : ''}>Profile</span>
                 {isMobile && <span className="text-[10px]">Profile</span>}
+              </button>
+              <button
+                onClick={() => setActiveTab('dashboard-visibility')}
+                className={`flex-1 sm:flex-none px-3 sm:px-5 md:px-6 py-3 sm:py-4 text-xs sm:text-sm font-medium transition flex items-center justify-center gap-1 sm:gap-2 whitespace-nowrap ${
+                  activeTab === 'dashboard-visibility'
+                    ? 'border-b-2 border-teal-600 text-teal-600 bg-teal-50'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                <Eye size={isMobile ? 16 : 18} />
+                <span className={isMobile ? 'sr-only' : ''}>Dashboard Visibility</span>
+                {isMobile && <span className="text-[10px]">Vis</span>}
               </button>
             </div>
 
@@ -597,6 +688,102 @@ export default function SettingsPage() {
                       >
                         Change Password
                       </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'dashboard-visibility' && (
+                <div className="space-y-6">
+                  <div className="bg-gradient-to-r from-teal-50 to-blue-50 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <LayoutDashboard size={20} className="text-teal-600" />
+                      <h3 className="text-base font-semibold text-gray-900">Dashboard Visibility Settings</h3>
+                    </div>
+                    <p className="text-xs text-gray-600 mb-4">
+                      Choose which sections to show or hide on your dashboard. Hidden sections will be completely removed from view.
+                    </p>
+                    
+                    <div className="space-y-3">
+                      <label className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 hover:shadow-md transition-all cursor-pointer group">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-blue-100 rounded-lg group-hover:scale-110 transition-transform">
+                            <BarChart3 size={18} className="text-blue-600" />
+                          </div>
+                          <div>
+                            <span className="text-sm font-medium text-gray-700">Metrics Cards</span>
+                            <p className="text-xs text-gray-500">Paper, Plastic, Metal cards</p>
+                          </div>
+                        </div>
+                        <input
+                          type="checkbox"
+                          name="showMetricsCards"
+                          checked={dashboardVisibility.showMetricsCards}
+                          onChange={handleDashboardVisibilityChange}
+                          className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
+                        />
+                      </label>
+
+                      <label className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 hover:shadow-md transition-all cursor-pointer group">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-green-100 rounded-lg group-hover:scale-110 transition-transform">
+                            <BarChart3 size={18} className="text-green-600" />
+                          </div>
+                          <div>
+                            <span className="text-sm font-medium text-gray-700">Chart Section</span>
+                            <p className="text-xs text-gray-500">Last 7 Days Trend / Material Composition</p>
+                          </div>
+                        </div>
+                        <input
+                          type="checkbox"
+                          name="showChart"
+                          checked={dashboardVisibility.showChart}
+                          onChange={handleDashboardVisibilityChange}
+                          className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
+                        />
+                      </label>
+
+                      <label className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 hover:shadow-md transition-all cursor-pointer group">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-purple-100 rounded-lg group-hover:scale-110 transition-transform">
+                            <Truck size={18} className="text-purple-600" />
+                          </div>
+                          <div>
+                            <span className="text-sm font-medium text-gray-700">Pickups Sidebar</span>
+                            <p className="text-xs text-gray-500">Upcoming pickups list</p>
+                          </div>
+                        </div>
+                        <input
+                          type="checkbox"
+                          name="showPickupsSidebar"
+                          checked={dashboardVisibility.showPickupsSidebar}
+                          onChange={handleDashboardVisibilityChange}
+                          className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
+                        />
+                      </label>
+
+                    </div>
+
+                    <div className="mt-6 pt-4 border-t border-gray-200">
+                      <button
+                        onClick={resetDashboardVisibility}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition flex items-center justify-center gap-2"
+                      >
+                        <RefreshCw size={14} />
+                        Reset to Default
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <EyeOff size={18} className="text-yellow-600 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium text-yellow-800">Note</p>
+                        <p className="text-xs text-yellow-700 mt-1">
+                          Changes to dashboard visibility will take effect immediately. Hidden sections will no longer appear on your dashboard page.
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>

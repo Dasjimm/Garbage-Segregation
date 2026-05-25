@@ -303,11 +303,8 @@ export default function RecyclingSegregationPage() {
       <div className="w-full overflow-x-hidden animate-fade-in">
         <div className="w-full px-3 sm:px-4 md:px-5 lg:px-6 py-4 sm:py-5 md:py-6 lg:py-8">
           
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6 sm:mb-8">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Recycling Segregation</h1>
-              <p className="text-sm text-gray-600 mt-1">Manage and monitor recycling operations</p>
-            </div>
+          {/* Header - Removed title and description, only kept export button */}
+          <div className="flex flex-col sm:flex-row justify-end items-end gap-3 mb-6 sm:mb-8">
             <div className="flex gap-2 w-full sm:w-auto">
               <button
                 onClick={exportToCSV}
@@ -320,6 +317,7 @@ export default function RecyclingSegregationPage() {
             </div>
           </div>
 
+          {/* Metrics Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 lg:gap-4 mb-6 sm:mb-8">
             <div className="bg-white rounded-lg shadow-sm p-2 sm:p-4 border-l-2 sm:border-l-4 border-blue-500 hover:shadow-md transition-all duration-300 group">
               <div className="flex items-center gap-1 sm:gap-2 text-blue-600 mb-1 sm:mb-2">
@@ -367,6 +365,7 @@ export default function RecyclingSegregationPage() {
             </div>
           </div>
 
+          {/* Tabs Section */}
           <div className="bg-white rounded-lg sm:rounded-xl shadow-sm overflow-hidden mb-6">
             <div className="flex border-b border-gray-200 overflow-x-auto">
               {['overview', 'categories'].map((tab) => (
@@ -517,6 +516,7 @@ export default function RecyclingSegregationPage() {
         </div>
       </div>
 
+      {/* Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-3">
           <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-lg sm:max-w-2xl max-h-[90vh] overflow-y-auto animate-fade-in">
