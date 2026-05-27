@@ -25,7 +25,8 @@ import {
   RefreshCw,
   MapPin,
   Truck,
-  CheckCircle
+  CheckCircle,
+  Menu
 } from 'lucide-react';
 
 interface Pickup {
@@ -194,6 +195,9 @@ export default function DashboardPage() {
   const [pickups, setPickups] = useState<Pickup[]>([]);
   const [formData, setFormData] = useState({ day: '', type: '', time: '' });
   const [lastActiveTime, setLastActiveTime] = useState(Date.now());
+
+  // Mobile slide-out sidebar state
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Dashboard visibility state
   const [dashboardVisibility, setDashboardVisibility] = useState({
@@ -454,7 +458,7 @@ export default function DashboardPage() {
   // Check screen size for mobile
   useEffect(() => {
     const checkScreenSize = () => {
-      setIsMobile(window.innerWidth < 1024);
+      setIsMobile(window.innerWidth < 768);
     };
     checkScreenSize();
     window.addEventListener('resize', checkScreenSize);
@@ -629,15 +633,26 @@ export default function DashboardPage() {
         <div className="flex flex-col lg:flex-row min-h-screen">
           {/* Main Content Area - Scrollable */}
           <div className="flex-1 min-w-0 px-3 sm:px-4 md:px-5 lg:px-6 xl:px-8 py-4 sm:py-5 md:py-6">
-            {/* Header - Removed the title and description, only kept refresh and live indicator */}
-            <div className="flex flex-col sm:flex-row justify-end items-end gap-4 mb-6">
-              <div className="flex items-center gap-3">
+            {/* Header with refresh, live indicator, and mobile menu button */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                {/* Mobile: Menu Button to open pickups sidebar */}
+                {isMobile && (
+                  <button
+                    onClick={() => setIsSidebarOpen(true)}
+                    className="p-2 text-gray-600 hover:text-teal-600 hover:bg-gray-100 rounded-xl transition-all"
+                  >
+                    <Menu size={22} />
+                  </button>
+                )}
                 {showLiveIndicator && (
                   <div className="flex items-center gap-2 bg-green-100 text-green-700 px-3 py-1.5 rounded-full animate-pulse shadow-sm">
                     <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                     <span className="text-xs font-medium">Live</span>
                   </div>
                 )}
+              </div>
+              <div className="flex items-center gap-3">
                 <button
                   onClick={handleManualRefresh}
                   className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:text-teal-600 transition-colors rounded-xl hover:bg-gray-100"
@@ -648,306 +663,568 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Metrics Cards - Conditionally rendered */}
-            {dashboardVisibility.showMetricsCards && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-                {metrics.map((metric, idx) => {
-                  const Icon = metric.icon;
-                  const colors = getColorClasses(metric.color);
-                  return (
-                    <div key={idx} className={`bg-white rounded-xl shadow-md p-4 border-l-4 ${colors.border} hover:shadow-lg transition-all duration-300 hover:-translate-y-0.5`}>
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="text-xs text-gray-500">{metric.label}</p>
-                          <p className="text-2xl font-bold text-gray-900 mt-1">{metric.value}</p>
-                        </div>
-                        <div className={`p-2 rounded-lg ${colors.bg}`}>
-                          <Icon className={colors.text} size={20} />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Chart Section with Pie Chart - Conditionally rendered */}
-            {dashboardVisibility.showChart && (
-              <div className="bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition-all duration-300">
-                <div className="flex justify-between items-center mb-4">
-                  <div className="flex items-center gap-2">
-                    {selectedChartType === 'bar' ? (
-                      <BarChart3 size={24} className="text-teal-600" />
-                    ) : (
-                      <PieChart size={24} className="text-teal-600" />
-                    )}
-                    <h3 className="text-lg font-semibold text-gray-900">
-                      {selectedChartType === 'bar' ? 'Last 7 Days Trend' : 'Material Composition'}
-                    </h3>
-                  </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => setSelectedChartType('bar')} className={`p-2 rounded-lg transition-all ${selectedChartType === 'bar' ? 'bg-teal-100 text-teal-600 shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-                      <BarChart3 size={18} />
-                    </button>
-                    <button onClick={() => setSelectedChartType('pie')} className={`p-2 rounded-lg transition-all ${selectedChartType === 'pie' ? 'bg-teal-100 text-teal-600 shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-                      <PieChart size={18} />
-                    </button>
-                  </div>
-                </div>
-                
-                {selectedChartType === 'bar' ? (
-                  <div className="relative">
-                    {/* Tooltip for bar chart - shows on hover (desktop) or tap (mobile) */}
-                    {(hoveredBar || selectedBar) && (
-                      <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-full bg-gray-900 text-white px-4 py-2 rounded-lg shadow-lg z-10 text-xs mb-2 whitespace-nowrap">
-                        <div className="font-semibold mb-1">{hoveredBar?.date || selectedBar?.date}</div>
-                        <div className="flex flex-col gap-1">
-                          <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                            <span>Paper: {(hoveredBar?.paper || selectedBar?.paper || 0).toFixed(1)} kg</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                            <span>Plastic: {(hoveredBar?.plastic || selectedBar?.plastic || 0).toFixed(1)} kg</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                            <span>Metal: {(hoveredBar?.metal || selectedBar?.metal || 0).toFixed(1)} kg</span>
-                          </div>
-                          <div className="border-t border-gray-700 my-1 pt-1">
-                            <span className="font-semibold">Total: {((hoveredBar?.paper || selectedBar?.paper || 0) + (hoveredBar?.plastic || selectedBar?.plastic || 0) + (hoveredBar?.metal || selectedBar?.metal || 0)).toFixed(1)} kg</span>
-                          </div>
-                        </div>
-                        <div className="text-[10px] text-gray-400 mt-1 text-center">As of {currentDate}</div>
-                      </div>
-                    )}
-                    <div className="h-80 flex items-end justify-between gap-2">
-                      {chartData.map((data, idx) => {
-                        const maxH = 240;
-                        const paperH = ((data.paper || 0) / maxValue) * maxH;
-                        const plasticH = ((data.plastic || 0) / maxValue) * maxH;
-                        const metalH = ((data.metal || 0) / maxValue) * maxH;
-                        return (
-                          <div 
-                            key={idx} 
-                            className="flex-1 flex flex-col items-center gap-2 group"
-                            onMouseEnter={() => setHoveredBar({
-                              date: data.date,
-                              paper: data.paper || 0,
-                              plastic: data.plastic || 0,
-                              metal: data.metal || 0
-                            })}
-                            onMouseLeave={() => setHoveredBar(null)}
-                            onClick={() => {
-                              // For mobile - toggle selection on tap
-                              if (selectedBar?.date === data.date) {
-                                setSelectedBar(null);
-                              } else {
-                                setSelectedBar({
-                                  date: data.date,
-                                  paper: data.paper || 0,
-                                  plastic: data.plastic || 0,
-                                  metal: data.metal || 0
-                                });
-                                // Auto hide after 3 seconds on mobile
-                                if (isMobile) {
-                                  setTimeout(() => setSelectedBar(null), 3000);
-                                }
-                              }
-                            }}
-                          >
-                            <div className="flex justify-center gap-1 items-end w-full cursor-pointer">
-                              <div 
-                                className="flex-1 max-w-[30px] bg-blue-500 rounded-t transition-all group-hover:bg-blue-600 group-hover:scale-110" 
-                                style={{ height: `${paperH}px` }}
-                              />
-                              <div 
-                                className="flex-1 max-w-[30px] bg-yellow-500 rounded-t transition-all group-hover:bg-yellow-600 group-hover:scale-110" 
-                                style={{ height: `${plasticH}px` }}
-                              />
-                              <div 
-                                className="flex-1 max-w-[30px] bg-purple-500 rounded-t transition-all group-hover:bg-purple-600 group-hover:scale-110" 
-                                style={{ height: `${metalH}px` }}
-                              />
-                            </div>
-                            <div className="text-xs text-gray-500 group-hover:text-teal-600 transition-colors font-medium">{data.date?.slice(5)}</div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="h-80 flex items-center justify-center">
-                    <div className="relative w-64 h-64">
-                      {/* Tooltip - shows when hovering over pie slices (desktop) or tapping (mobile) */}
-                      {(hoveredSlice || selectedSlice) && (
-                        <div className="absolute -top-14 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-4 py-2 rounded-lg shadow-lg z-10 whitespace-nowrap text-xs flex flex-col items-center">
-                          <span className="font-semibold">{(hoveredSlice || selectedSlice)?.split(':')[0]}</span>
-                          <span>{(hoveredSlice || selectedSlice)?.split(':')[1]}</span>
-                        </div>
-                      )}
-                      
-                      <svg viewBox="0 0 100 100" className="transform -rotate-90 w-full h-full">
-                        {/* Paper slice */}
-                        <g
-                          onMouseEnter={() => {
-                            const percentage = ((totals.paper / totals.grand) * 100 || 0).toFixed(1);
-                            setHoveredSlice(`Paper: ${totals.paper.toFixed(1)} kg (${percentage}%) | As of ${currentDate}`);
-                          }}
-                          onMouseLeave={() => setHoveredSlice(null)}
-                          onClick={() => {
-                            const percentage = ((totals.paper / totals.grand) * 100 || 0).toFixed(1);
-                            const sliceText = `Paper: ${totals.paper.toFixed(1)} kg (${percentage}%) | As of ${currentDate}`;
-                            if (selectedSlice === sliceText) {
-                              setSelectedSlice(null);
-                            } else {
-                              setSelectedSlice(sliceText);
-                              if (isMobile) {
-                                setTimeout(() => setSelectedSlice(null), 3000);
-                              }
-                            }
-                          }}
-                          className="cursor-pointer transition-all duration-300"
-                        >
-                          <circle 
-                            cx="50" 
-                            cy="50" 
-                            r="40" 
-                            fill="none" 
-                            stroke="#3B82F6" 
-                            strokeWidth="20" 
-                            strokeDasharray={`${(totals.paper / totals.grand || 0) * 251.2} 251.2`} 
-                            className="transition-all duration-300 hover:stroke-blue-700 hover:stroke-width-24"
-                          />
-                        </g>
-                        
-                        {/* Plastic slice */}
-                        <g
-                          onMouseEnter={() => {
-                            const percentage = ((totals.plastic / totals.grand) * 100 || 0).toFixed(1);
-                            setHoveredSlice(`Plastic: ${totals.plastic.toFixed(1)} kg (${percentage}%) | As of ${currentDate}`);
-                          }}
-                          onMouseLeave={() => setHoveredSlice(null)}
-                          onClick={() => {
-                            const percentage = ((totals.plastic / totals.grand) * 100 || 0).toFixed(1);
-                            const sliceText = `Plastic: ${totals.plastic.toFixed(1)} kg (${percentage}%) | As of ${currentDate}`;
-                            if (selectedSlice === sliceText) {
-                              setSelectedSlice(null);
-                            } else {
-                              setSelectedSlice(sliceText);
-                              if (isMobile) {
-                                setTimeout(() => setSelectedSlice(null), 3000);
-                              }
-                            }
-                          }}
-                          className="cursor-pointer transition-all duration-300"
-                        >
-                          <circle 
-                            cx="50" 
-                            cy="50" 
-                            r="40" 
-                            fill="none" 
-                            stroke="#EAB308" 
-                            strokeWidth="20" 
-                            strokeDasharray={`${(totals.plastic / totals.grand || 0) * 251.2} 251.2`} 
-                            strokeDashoffset={`-${(totals.paper / totals.grand || 0) * 251.2}`}
-                            className="transition-all duration-300 hover:stroke-yellow-600 hover:stroke-width-24"
-                          />
-                        </g>
-                        
-                        {/* Metal slice */}
-                        <g
-                          onMouseEnter={() => {
-                            const percentage = ((totals.metal / totals.grand) * 100 || 0).toFixed(1);
-                            setHoveredSlice(`Metal: ${totals.metal.toFixed(1)} kg (${percentage}%) | As of ${currentDate}`);
-                          }}
-                          onMouseLeave={() => setHoveredSlice(null)}
-                          onClick={() => {
-                            const percentage = ((totals.metal / totals.grand) * 100 || 0).toFixed(1);
-                            const sliceText = `Metal: ${totals.metal.toFixed(1)} kg (${percentage}%) | As of ${currentDate}`;
-                            if (selectedSlice === sliceText) {
-                              setSelectedSlice(null);
-                            } else {
-                              setSelectedSlice(sliceText);
-                              if (isMobile) {
-                                setTimeout(() => setSelectedSlice(null), 3000);
-                              }
-                            }
-                          }}
-                          className="cursor-pointer transition-all duration-300"
-                        >
-                          <circle 
-                            cx="50" 
-                            cy="50" 
-                            r="40" 
-                            fill="none" 
-                            stroke="#A855F7" 
-                            strokeWidth="20" 
-                            strokeDasharray={`${(totals.metal / totals.grand || 0) * 251.2} 251.2`} 
-                            strokeDashoffset={`-${((totals.paper + totals.plastic) / totals.grand || 0) * 251.2}`}
-                            className="transition-all duration-300 hover:stroke-purple-600 hover:stroke-width-24"
-                          />
-                        </g>
-                      </svg>
-                      
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-gray-800">{totals.grand.toFixed(1)}</p>
-                          <p className="text-xs text-gray-500">Total kg</p>
-                          <p className="text-[10px] text-gray-400 mt-1">{currentDate.split(',')[0]}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                
-                {selectedChartType === 'bar' ? (
-                  <div className="flex justify-center gap-8 mt-6 pt-2">
-                    <div className="flex items-center gap-2"><div className="w-3 h-3 bg-blue-500 rounded-full"></div><span className="text-sm font-medium text-gray-700">Paper</span></div>
-                    <div className="flex items-center gap-2"><div className="w-3 h-3 bg-yellow-500 rounded-full"></div><span className="text-sm font-medium text-gray-700">Plastic</span></div>
-                    <div className="flex items-center gap-2"><div className="w-3 h-3 bg-purple-500 rounded-full"></div><span className="text-sm font-medium text-gray-700">Metal</span></div>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-3 gap-4 mt-6 pt-2 max-w-md mx-auto">
-                    {pieSlices.map((slice, idx) => {
-                      const Icon = slice.icon;
-                      const sliceText = `${slice.name}: ${slice.value.toFixed(1)} kg (${slice.percentage}%) | As of ${currentDate}`;
+            {/* DESKTOP VIEW: Metrics Cards first, then Chart */}
+            {!isMobile && (
+              <>
+                {/* Metrics Cards - First on Desktop */}
+                {dashboardVisibility.showMetricsCards && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                    {metrics.map((metric, idx) => {
+                      const Icon = metric.icon;
+                      const colors = getColorClasses(metric.color);
                       return (
-                        <div 
-                          key={idx} 
-                          className="flex flex-col items-center gap-1 cursor-pointer transition-all duration-300 hover:scale-105"
-                          onMouseEnter={() => setHoveredSlice(sliceText)}
-                          onMouseLeave={() => setHoveredSlice(null)}
-                          onClick={() => {
-                            if (selectedSlice === sliceText) {
-                              setSelectedSlice(null);
-                            } else {
-                              setSelectedSlice(sliceText);
-                              if (isMobile) {
-                                setTimeout(() => setSelectedSlice(null), 3000);
-                              }
-                            }
-                          }}
-                        >
-                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: slice.color }}></div>
-                          <span className="text-xs font-medium text-gray-700">{slice.name}</span>
-                          <span className="text-sm font-bold" style={{ color: slice.color }}>{slice.percentage}%</span>
-                          <span className="text-xs text-gray-500">{slice.value.toFixed(1)} kg</span>
+                        <div key={idx} className={`bg-white rounded-xl shadow-md p-4 border-l-4 ${colors.border} hover:shadow-lg transition-all duration-300 hover:-translate-y-0.5`}>
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <p className="text-xs text-gray-500">{metric.label}</p>
+                              <p className="text-2xl font-bold text-gray-900 mt-1">{metric.value}</p>
+                            </div>
+                            <div className={`p-2 rounded-lg ${colors.bg}`}>
+                              <Icon className={colors.text} size={20} />
+                            </div>
+                          </div>
                         </div>
                       );
                     })}
                   </div>
                 )}
-              </div>
+
+                {/* Chart Section - Second on Desktop */}
+                {dashboardVisibility.showChart && (
+                  <div className="bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition-all duration-300">
+                    <div className="flex justify-between items-center mb-4">
+                      <div className="flex items-center gap-2">
+                        {selectedChartType === 'bar' ? (
+                          <BarChart3 size={24} className="text-teal-600" />
+                        ) : (
+                          <PieChart size={24} className="text-teal-600" />
+                        )}
+                        <h3 className="text-lg font-semibold text-gray-900">
+                          {selectedChartType === 'bar' ? 'Last 7 Days Trend' : 'Material Composition'}
+                        </h3>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => setSelectedChartType('bar')} className={`p-2 rounded-lg transition-all ${selectedChartType === 'bar' ? 'bg-teal-100 text-teal-600 shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                          <BarChart3 size={18} />
+                        </button>
+                        <button onClick={() => setSelectedChartType('pie')} className={`p-2 rounded-lg transition-all ${selectedChartType === 'pie' ? 'bg-teal-100 text-teal-600 shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                          <PieChart size={18} />
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {selectedChartType === 'bar' ? (
+                      <div className="relative">
+                        {(hoveredBar || selectedBar) && (
+                          <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-full bg-gray-900 text-white px-4 py-2 rounded-lg shadow-lg z-10 text-xs mb-2 whitespace-nowrap">
+                            <div className="font-semibold mb-1">{hoveredBar?.date || selectedBar?.date}</div>
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                                <span>Paper: {(hoveredBar?.paper || selectedBar?.paper || 0).toFixed(1)} kg</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                                <span>Plastic: {(hoveredBar?.plastic || selectedBar?.plastic || 0).toFixed(1)} kg</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                                <span>Metal: {(hoveredBar?.metal || selectedBar?.metal || 0).toFixed(1)} kg</span>
+                              </div>
+                              <div className="border-t border-gray-700 my-1 pt-1">
+                                <span className="font-semibold">Total: {((hoveredBar?.paper || selectedBar?.paper || 0) + (hoveredBar?.plastic || selectedBar?.plastic || 0) + (hoveredBar?.metal || selectedBar?.metal || 0)).toFixed(1)} kg</span>
+                              </div>
+                            </div>
+                            <div className="text-[10px] text-gray-400 mt-1 text-center">As of {currentDate}</div>
+                          </div>
+                        )}
+                        <div className="h-80 flex items-end justify-between gap-2">
+                          {chartData.map((data, idx) => {
+                            const maxH = 240;
+                            const paperH = ((data.paper || 0) / maxValue) * maxH;
+                            const plasticH = ((data.plastic || 0) / maxValue) * maxH;
+                            const metalH = ((data.metal || 0) / maxValue) * maxH;
+                            return (
+                              <div 
+                                key={idx} 
+                                className="flex-1 flex flex-col items-center gap-2 group"
+                                onMouseEnter={() => setHoveredBar({
+                                  date: data.date,
+                                  paper: data.paper || 0,
+                                  plastic: data.plastic || 0,
+                                  metal: data.metal || 0
+                                })}
+                                onMouseLeave={() => setHoveredBar(null)}
+                                onClick={() => {
+                                  if (selectedBar?.date === data.date) {
+                                    setSelectedBar(null);
+                                  } else {
+                                    setSelectedBar({
+                                      date: data.date,
+                                      paper: data.paper || 0,
+                                      plastic: data.plastic || 0,
+                                      metal: data.metal || 0
+                                    });
+                                  }
+                                }}
+                              >
+                                <div className="flex justify-center gap-1 items-end w-full cursor-pointer">
+                                  <div 
+                                    className="flex-1 max-w-[30px] bg-blue-500 rounded-t transition-all group-hover:bg-blue-600 group-hover:scale-110" 
+                                    style={{ height: `${paperH}px` }}
+                                  />
+                                  <div 
+                                    className="flex-1 max-w-[30px] bg-yellow-500 rounded-t transition-all group-hover:bg-yellow-600 group-hover:scale-110" 
+                                    style={{ height: `${plasticH}px` }}
+                                  />
+                                  <div 
+                                    className="flex-1 max-w-[30px] bg-purple-500 rounded-t transition-all group-hover:bg-purple-600 group-hover:scale-110" 
+                                    style={{ height: `${metalH}px` }}
+                                  />
+                                </div>
+                                <div className="text-xs text-gray-500 group-hover:text-teal-600 transition-colors font-medium">{data.date?.slice(5)}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="h-80 flex items-center justify-center">
+                        <div className="relative w-64 h-64">
+                          {(hoveredSlice || selectedSlice) && (
+                            <div className="absolute -top-14 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-4 py-2 rounded-lg shadow-lg z-10 whitespace-nowrap text-xs flex flex-col items-center">
+                              <span className="font-semibold">{(hoveredSlice || selectedSlice)?.split(':')[0]}</span>
+                              <span>{(hoveredSlice || selectedSlice)?.split(':')[1]}</span>
+                            </div>
+                          )}
+                          
+                          <svg viewBox="0 0 100 100" className="transform -rotate-90 w-full h-full">
+                            <g
+                              onMouseEnter={() => {
+                                const percentage = ((totals.paper / totals.grand) * 100 || 0).toFixed(1);
+                                setHoveredSlice(`Paper: ${totals.paper.toFixed(1)} kg (${percentage}%) | As of ${currentDate}`);
+                              }}
+                              onMouseLeave={() => setHoveredSlice(null)}
+                              onClick={() => {
+                                const percentage = ((totals.paper / totals.grand) * 100 || 0).toFixed(1);
+                                const sliceText = `Paper: ${totals.paper.toFixed(1)} kg (${percentage}%) | As of ${currentDate}`;
+                                if (selectedSlice === sliceText) {
+                                  setSelectedSlice(null);
+                                } else {
+                                  setSelectedSlice(sliceText);
+                                }
+                              }}
+                              className="cursor-pointer transition-all duration-300"
+                            >
+                              <circle 
+                                cx="50" 
+                                cy="50" 
+                                r="40" 
+                                fill="none" 
+                                stroke="#3B82F6" 
+                                strokeWidth="20" 
+                                strokeDasharray={`${(totals.paper / totals.grand || 0) * 251.2} 251.2`} 
+                                className="transition-all duration-300 hover:stroke-blue-700"
+                              />
+                            </g>
+                            
+                            <g
+                              onMouseEnter={() => {
+                                const percentage = ((totals.plastic / totals.grand) * 100 || 0).toFixed(1);
+                                setHoveredSlice(`Plastic: ${totals.plastic.toFixed(1)} kg (${percentage}%) | As of ${currentDate}`);
+                              }}
+                              onMouseLeave={() => setHoveredSlice(null)}
+                              onClick={() => {
+                                const percentage = ((totals.plastic / totals.grand) * 100 || 0).toFixed(1);
+                                const sliceText = `Plastic: ${totals.plastic.toFixed(1)} kg (${percentage}%) | As of ${currentDate}`;
+                                if (selectedSlice === sliceText) {
+                                  setSelectedSlice(null);
+                                } else {
+                                  setSelectedSlice(sliceText);
+                                }
+                              }}
+                              className="cursor-pointer transition-all duration-300"
+                            >
+                              <circle 
+                                cx="50" 
+                                cy="50" 
+                                r="40" 
+                                fill="none" 
+                                stroke="#EAB308" 
+                                strokeWidth="20" 
+                                strokeDasharray={`${(totals.plastic / totals.grand || 0) * 251.2} 251.2`} 
+                                strokeDashoffset={`-${(totals.paper / totals.grand || 0) * 251.2}`}
+                                className="transition-all duration-300 hover:stroke-yellow-600"
+                              />
+                            </g>
+                            
+                            <g
+                              onMouseEnter={() => {
+                                const percentage = ((totals.metal / totals.grand) * 100 || 0).toFixed(1);
+                                setHoveredSlice(`Metal: ${totals.metal.toFixed(1)} kg (${percentage}%) | As of ${currentDate}`);
+                              }}
+                              onMouseLeave={() => setHoveredSlice(null)}
+                              onClick={() => {
+                                const percentage = ((totals.metal / totals.grand) * 100 || 0).toFixed(1);
+                                const sliceText = `Metal: ${totals.metal.toFixed(1)} kg (${percentage}%) | As of ${currentDate}`;
+                                if (selectedSlice === sliceText) {
+                                  setSelectedSlice(null);
+                                } else {
+                                  setSelectedSlice(sliceText);
+                                }
+                              }}
+                              className="cursor-pointer transition-all duration-300"
+                            >
+                              <circle 
+                                cx="50" 
+                                cy="50" 
+                                r="40" 
+                                fill="none" 
+                                stroke="#A855F7" 
+                                strokeWidth="20" 
+                                strokeDasharray={`${(totals.metal / totals.grand || 0) * 251.2} 251.2`} 
+                                strokeDashoffset={`-${((totals.paper + totals.plastic) / totals.grand || 0) * 251.2}`}
+                                className="transition-all duration-300 hover:stroke-purple-600"
+                              />
+                            </g>
+                          </svg>
+                          
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div className="text-center">
+                              <p className="text-2xl font-bold text-gray-800">{totals.grand.toFixed(1)}</p>
+                              <p className="text-xs text-gray-500">Total kg</p>
+                              <p className="text-[10px] text-gray-400 mt-1">{currentDate.split(',')[0]}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {selectedChartType === 'bar' ? (
+                      <div className="flex justify-center gap-8 mt-6 pt-2">
+                        <div className="flex items-center gap-2"><div className="w-3 h-3 bg-blue-500 rounded-full"></div><span className="text-sm font-medium text-gray-700">Paper</span></div>
+                        <div className="flex items-center gap-2"><div className="w-3 h-3 bg-yellow-500 rounded-full"></div><span className="text-sm font-medium text-gray-700">Plastic</span></div>
+                        <div className="flex items-center gap-2"><div className="w-3 h-3 bg-purple-500 rounded-full"></div><span className="text-sm font-medium text-gray-700">Metal</span></div>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-4 mt-6 pt-2 max-w-md mx-auto">
+                        {pieSlices.map((slice, idx) => {
+                          const Icon = slice.icon;
+                          const sliceText = `${slice.name}: ${slice.value.toFixed(1)} kg (${slice.percentage}%) | As of ${currentDate}`;
+                          return (
+                            <div 
+                              key={idx} 
+                              className="flex flex-col items-center gap-1 cursor-pointer transition-all duration-300 hover:scale-105"
+                              onMouseEnter={() => setHoveredSlice(sliceText)}
+                              onMouseLeave={() => setHoveredSlice(null)}
+                              onClick={() => {
+                                if (selectedSlice === sliceText) {
+                                  setSelectedSlice(null);
+                                } else {
+                                  setSelectedSlice(sliceText);
+                                }
+                              }}
+                            >
+                              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: slice.color }}></div>
+                              <span className="text-xs font-medium text-gray-700">{slice.name}</span>
+                              <span className="text-sm font-bold" style={{ color: slice.color }}>{slice.percentage}%</span>
+                              <span className="text-xs text-gray-500">{slice.value.toFixed(1)} kg</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* MOBILE VIEW: Chart first, then Metrics Cards */}
+            {isMobile && (
+              <>
+                {/* Chart Section - First on Mobile */}
+                {dashboardVisibility.showChart && (
+                  <div className="bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition-all duration-300 mb-6">
+                    <div className={`flex justify-between items-center mb-4 flex-col gap-3`}>
+                      <div className="flex items-center gap-2">
+                        {selectedChartType === 'bar' ? (
+                          <BarChart3 size={24} className="text-teal-600" />
+                        ) : (
+                          <PieChart size={24} className="text-teal-600" />
+                        )}
+                        <h3 className="text-lg font-semibold text-gray-900">
+                          {selectedChartType === 'bar' ? 'Last 7 Days Trend' : 'Material Composition'}
+                        </h3>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => setSelectedChartType('bar')} className={`p-2 rounded-lg transition-all ${selectedChartType === 'bar' ? 'bg-teal-100 text-teal-600 shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                          <BarChart3 size={18} />
+                        </button>
+                        <button onClick={() => setSelectedChartType('pie')} className={`p-2 rounded-lg transition-all ${selectedChartType === 'pie' ? 'bg-teal-100 text-teal-600 shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                          <PieChart size={18} />
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {selectedChartType === 'bar' ? (
+                      <div className="relative">
+                        {(hoveredBar || selectedBar) && (
+                          <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-full bg-gray-900 text-white px-4 py-2 rounded-lg shadow-lg z-10 text-xs mb-2 whitespace-nowrap">
+                            <div className="font-semibold mb-1">{hoveredBar?.date || selectedBar?.date}</div>
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                                <span>Paper: {(hoveredBar?.paper || selectedBar?.paper || 0).toFixed(1)} kg</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                                <span>Plastic: {(hoveredBar?.plastic || selectedBar?.plastic || 0).toFixed(1)} kg</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                                <span>Metal: {(hoveredBar?.metal || selectedBar?.metal || 0).toFixed(1)} kg</span>
+                              </div>
+                              <div className="border-t border-gray-700 my-1 pt-1">
+                                <span className="font-semibold">Total: {((hoveredBar?.paper || selectedBar?.paper || 0) + (hoveredBar?.plastic || selectedBar?.plastic || 0) + (hoveredBar?.metal || selectedBar?.metal || 0)).toFixed(1)} kg</span>
+                              </div>
+                            </div>
+                            <div className="text-[10px] text-gray-400 mt-1 text-center">As of {currentDate}</div>
+                          </div>
+                        )}
+                        <div className="h-64 flex items-end justify-between gap-1 overflow-x-auto pb-2">
+                          {chartData.map((data, idx) => {
+                            const maxH = 180;
+                            const paperH = ((data.paper || 0) / maxValue) * maxH;
+                            const plasticH = ((data.plastic || 0) / maxValue) * maxH;
+                            const metalH = ((data.metal || 0) / maxValue) * maxH;
+                            return (
+                              <div 
+                                key={idx} 
+                                className="flex-1 flex flex-col items-center gap-2 group min-w-[45px]"
+                                onMouseEnter={() => setHoveredBar({
+                                  date: data.date,
+                                  paper: data.paper || 0,
+                                  plastic: data.plastic || 0,
+                                  metal: data.metal || 0
+                                })}
+                                onMouseLeave={() => setHoveredBar(null)}
+                                onClick={() => {
+                                  if (selectedBar?.date === data.date) {
+                                    setSelectedBar(null);
+                                  } else {
+                                    setSelectedBar({
+                                      date: data.date,
+                                      paper: data.paper || 0,
+                                      plastic: data.plastic || 0,
+                                      metal: data.metal || 0
+                                    });
+                                    setTimeout(() => setSelectedBar(null), 3000);
+                                  }
+                                }}
+                              >
+                                <div className="flex justify-center gap-1 items-end w-full cursor-pointer">
+                                  <div 
+                                    className="flex-1 max-w-[25px] bg-blue-500 rounded-t transition-all group-hover:bg-blue-600 group-hover:scale-110" 
+                                    style={{ height: `${paperH}px` }}
+                                  />
+                                  <div 
+                                    className="flex-1 max-w-[25px] bg-yellow-500 rounded-t transition-all group-hover:bg-yellow-600 group-hover:scale-110" 
+                                    style={{ height: `${plasticH}px` }}
+                                  />
+                                  <div 
+                                    className="flex-1 max-w-[25px] bg-purple-500 rounded-t transition-all group-hover:bg-purple-600 group-hover:scale-110" 
+                                    style={{ height: `${metalH}px` }}
+                                  />
+                                </div>
+                                <div className="text-[10px] text-gray-500 group-hover:text-teal-600 transition-colors font-medium">{data.date?.slice(5)}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="h-64 flex items-center justify-center">
+                        <div className="relative w-48 h-48">
+                          {(hoveredSlice || selectedSlice) && (
+                            <div className="absolute -top-14 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-4 py-2 rounded-lg shadow-lg z-10 whitespace-nowrap text-xs flex flex-col items-center">
+                              <span className="font-semibold">{(hoveredSlice || selectedSlice)?.split(':')[0]}</span>
+                              <span>{(hoveredSlice || selectedSlice)?.split(':')[1]}</span>
+                            </div>
+                          )}
+                          
+                          <svg viewBox="0 0 100 100" className="transform -rotate-90 w-full h-full">
+                            <g
+                              onMouseEnter={() => {
+                                const percentage = ((totals.paper / totals.grand) * 100 || 0).toFixed(1);
+                                setHoveredSlice(`Paper: ${totals.paper.toFixed(1)} kg (${percentage}%) | As of ${currentDate}`);
+                              }}
+                              onMouseLeave={() => setHoveredSlice(null)}
+                              onClick={() => {
+                                const percentage = ((totals.paper / totals.grand) * 100 || 0).toFixed(1);
+                                const sliceText = `Paper: ${totals.paper.toFixed(1)} kg (${percentage}%) | As of ${currentDate}`;
+                                if (selectedSlice === sliceText) {
+                                  setSelectedSlice(null);
+                                } else {
+                                  setSelectedSlice(sliceText);
+                                  setTimeout(() => setSelectedSlice(null), 3000);
+                                }
+                              }}
+                              className="cursor-pointer transition-all duration-300"
+                            >
+                              <circle 
+                                cx="50" 
+                                cy="50" 
+                                r="40" 
+                                fill="none" 
+                                stroke="#3B82F6" 
+                                strokeWidth="20" 
+                                strokeDasharray={`${(totals.paper / totals.grand || 0) * 251.2} 251.2`} 
+                                className="transition-all duration-300 hover:stroke-blue-700"
+                              />
+                            </g>
+                            
+                            <g
+                              onMouseEnter={() => {
+                                const percentage = ((totals.plastic / totals.grand) * 100 || 0).toFixed(1);
+                                setHoveredSlice(`Plastic: ${totals.plastic.toFixed(1)} kg (${percentage}%) | As of ${currentDate}`);
+                              }}
+                              onMouseLeave={() => setHoveredSlice(null)}
+                              onClick={() => {
+                                const percentage = ((totals.plastic / totals.grand) * 100 || 0).toFixed(1);
+                                const sliceText = `Plastic: ${totals.plastic.toFixed(1)} kg (${percentage}%) | As of ${currentDate}`;
+                                if (selectedSlice === sliceText) {
+                                  setSelectedSlice(null);
+                                } else {
+                                  setSelectedSlice(sliceText);
+                                  setTimeout(() => setSelectedSlice(null), 3000);
+                                }
+                              }}
+                              className="cursor-pointer transition-all duration-300"
+                            >
+                              <circle 
+                                cx="50" 
+                                cy="50" 
+                                r="40" 
+                                fill="none" 
+                                stroke="#EAB308" 
+                                strokeWidth="20" 
+                                strokeDasharray={`${(totals.plastic / totals.grand || 0) * 251.2} 251.2`} 
+                                strokeDashoffset={`-${(totals.paper / totals.grand || 0) * 251.2}`}
+                                className="transition-all duration-300 hover:stroke-yellow-600"
+                              />
+                            </g>
+                            
+                            <g
+                              onMouseEnter={() => {
+                                const percentage = ((totals.metal / totals.grand) * 100 || 0).toFixed(1);
+                                setHoveredSlice(`Metal: ${totals.metal.toFixed(1)} kg (${percentage}%) | As of ${currentDate}`);
+                              }}
+                              onMouseLeave={() => setHoveredSlice(null)}
+                              onClick={() => {
+                                const percentage = ((totals.metal / totals.grand) * 100 || 0).toFixed(1);
+                                const sliceText = `Metal: ${totals.metal.toFixed(1)} kg (${percentage}%) | As of ${currentDate}`;
+                                if (selectedSlice === sliceText) {
+                                  setSelectedSlice(null);
+                                } else {
+                                  setSelectedSlice(sliceText);
+                                  setTimeout(() => setSelectedSlice(null), 3000);
+                                }
+                              }}
+                              className="cursor-pointer transition-all duration-300"
+                            >
+                              <circle 
+                                cx="50" 
+                                cy="50" 
+                                r="40" 
+                                fill="none" 
+                                stroke="#A855F7" 
+                                strokeWidth="20" 
+                                strokeDasharray={`${(totals.metal / totals.grand || 0) * 251.2} 251.2`} 
+                                strokeDashoffset={`-${((totals.paper + totals.plastic) / totals.grand || 0) * 251.2}`}
+                                className="transition-all duration-300 hover:stroke-purple-600"
+                              />
+                            </g>
+                          </svg>
+                          
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div className="text-center">
+                              <p className="text-xl font-bold text-gray-800">{totals.grand.toFixed(1)}</p>
+                              <p className="text-[10px] text-gray-500">Total kg</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {selectedChartType === 'bar' ? (
+                      <div className="flex justify-center gap-4 mt-6 pt-2">
+                        <div className="flex items-center gap-1"><div className="w-2 h-2 bg-blue-500 rounded-full"></div><span className="text-[10px] font-medium text-gray-700">Paper</span></div>
+                        <div className="flex items-center gap-1"><div className="w-2 h-2 bg-yellow-500 rounded-full"></div><span className="text-[10px] font-medium text-gray-700">Plastic</span></div>
+                        <div className="flex items-center gap-1"><div className="w-2 h-2 bg-purple-500 rounded-full"></div><span className="text-[10px] font-medium text-gray-700">Metal</span></div>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-2 mt-6 pt-2 max-w-md mx-auto">
+                        {pieSlices.map((slice, idx) => {
+                          const Icon = slice.icon;
+                          const sliceText = `${slice.name}: ${slice.value.toFixed(1)} kg (${slice.percentage}%) | As of ${currentDate}`;
+                          return (
+                            <div 
+                              key={idx} 
+                              className="flex flex-col items-center gap-0.5 cursor-pointer transition-all duration-300 hover:scale-105"
+                              onMouseEnter={() => setHoveredSlice(sliceText)}
+                              onMouseLeave={() => setHoveredSlice(null)}
+                              onClick={() => {
+                                if (selectedSlice === sliceText) {
+                                  setSelectedSlice(null);
+                                } else {
+                                  setSelectedSlice(sliceText);
+                                  setTimeout(() => setSelectedSlice(null), 3000);
+                                }
+                              }}
+                            >
+                              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: slice.color }}></div>
+                              <span className="text-[10px] font-medium text-gray-700">{slice.name}</span>
+                              <span className="text-[10px] font-bold" style={{ color: slice.color }}>{slice.percentage}%</span>
+                              <span className="text-[8px] text-gray-500">{slice.value.toFixed(1)} kg</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Metrics Cards - Second on Mobile */}
+                {dashboardVisibility.showMetricsCards && (
+                  <div className="grid grid-cols-1 gap-4 mb-6">
+                    {metrics.map((metric, idx) => {
+                      const Icon = metric.icon;
+                      const colors = getColorClasses(metric.color);
+                      return (
+                        <div key={idx} className={`bg-white rounded-xl shadow-md p-4 border-l-4 ${colors.border} hover:shadow-lg transition-all duration-300 hover:-translate-y-0.5`}>
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <p className="text-xs text-gray-500">{metric.label}</p>
+                              <p className="text-2xl font-bold text-gray-900 mt-1">{metric.value}</p>
+                            </div>
+                            <div className={`p-2 rounded-lg ${colors.bg}`}>
+                              <Icon className={colors.text} size={20} />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
             )}
           </div>
 
-          {/* Static Sidebar - Stays in place when scrolling - Conditionally rendered */}
+          {/* Desktop Sidebar - Static (unchanged) */}
           {dashboardVisibility.showPickupsSidebar && !isMobile && (
             <div className="w-80 flex-shrink-0 hidden lg:block">
               <div className="fixed top-24 w-80">
                 <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-                  {/* Header */}
                   <div className="bg-gradient-to-r from-teal-500 to-teal-600 px-4 py-3.5">
                     <div className="flex justify-between items-center">
                       <div className="flex items-center gap-2.5">
@@ -969,7 +1246,6 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  {/* Body */}
                   <div className="p-3">
                     <div className="space-y-2 max-h-[calc(100vh-250px)] overflow-y-auto">
                       {isLoading && pickups.length === 0 ? (
@@ -1058,7 +1334,6 @@ export default function DashboardPage() {
                       )}
                     </div>
 
-                    {/* Footer */}
                     {pickups.length > 0 && (
                       <div className="mt-3 pt-2 border-t border-gray-100">
                         <div className="flex items-center justify-between text-[9px]">
@@ -1080,50 +1355,153 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Mobile Pickups Section */}
-        {isMobile && dashboardVisibility.showPickupsSidebar && (
-          <div className="px-3 sm:px-4 md:px-5 lg:px-6 xl:px-8 py-4">
-            <div className="bg-white rounded-xl shadow-md p-4">
-              <div className="flex justify-between items-center mb-4">
-                <div className="flex items-center gap-2">
-                  <Truck size={20} className="text-teal-600" />
-                  <h3 className="text-base font-semibold text-gray-900">Upcoming Pickups</h3>
-                </div>
-                <button onClick={openAddModal} className="px-3 py-1.5 bg-teal-50 text-teal-600 rounded-lg text-sm font-medium">
-                  <Plus size={14} /> Add
-                </button>
-              </div>
-              <div className="space-y-2">
-                {pickups.length > 0 ? (
-                  pickups.map((item) => {
-                    const getTypeIcon = (type: string) => {
-                      switch(type) {
-                        case 'Paper': return <FileText size={14} className="text-blue-500" />;
-                        case 'Plastic': return <Package size={14} className="text-yellow-500" />;
-                        case 'Metal': return <Recycle size={14} className="text-purple-500" />;
-                        default: return <Package size={14} className="text-gray-500" />;
-                      }
-                    };
-                    
-                    return (
-                      <div key={item.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                        <div>
-                          <p className="text-sm font-medium">{item.day}</p>
-                          <p className="text-xs text-gray-500">{item.type} • {item.time}</p>
-                        </div>
-                        <div className="flex gap-2">
-                          <button onClick={() => openEditModal(item)} className="text-blue-500"><Edit size={14} /></button>
-                          <button onClick={() => handleDelete(item.id)} className="text-red-500"><Trash2 size={14} /></button>
-                        </div>
+        {/* Mobile Slide-out Sidebar for Pickups */}
+        {isMobile && (
+          <>
+            {/* Overlay */}
+            {isSidebarOpen && (
+              <div 
+                className="fixed inset-0 bg-black/50 z-40 transition-opacity duration-300"
+                onClick={() => setIsSidebarOpen(false)}
+              />
+            )}
+            
+            {/* Slide-out Sidebar */}
+            <div className={`fixed top-0 right-0 h-full w-85 bg-white shadow-2xl z-50 transition-transform duration-300 ease-in-out ${
+              isSidebarOpen ? 'translate-x-0' : 'translate-x-full'
+            }`}>
+              <div className="h-full flex flex-col">
+                {/* Header */}
+                <div className="bg-gradient-to-r from-teal-500 to-teal-600 px-5 py-4">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-white/20 rounded-xl backdrop-blur-sm">
+                        <Truck size={18} className="text-white" />
                       </div>
-                    );
-                  })
-                ) : (
-                  <p className="text-center text-gray-500 py-4">No pickups scheduled</p>
-                )}
+                      <div>
+                        <h3 className="text-base font-bold text-white">Upcoming Pickups</h3>
+                        <p className="text-[11px] text-white/80">{pickups.length} scheduled</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => setIsSidebarOpen(false)}
+                      className="p-2 bg-white/20 rounded-lg text-white hover:bg-white/30 transition-all"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Body */}
+                <div className="flex-1 overflow-y-auto p-4">
+                  <div className="space-y-3">
+                    {isLoading && pickups.length === 0 ? (
+                      Array(4).fill(0).map((_, i) => (
+                        <div key={i} className="animate-pulse">
+                          <div className="h-20 bg-gray-100 rounded-xl"></div>
+                        </div>
+                      ))
+                    ) : pickups.length > 0 ? (
+                      pickups.map((item) => {
+                        const getTypeIcon = (type: string) => {
+                          switch(type) {
+                            case 'Paper': return <FileText size={16} className="text-blue-500" />;
+                            case 'Plastic': return <Package size={16} className="text-yellow-500" />;
+                            case 'Metal': return <Recycle size={16} className="text-purple-500" />;
+                            default: return <Package size={16} className="text-gray-500" />;
+                          }
+                        };
+                        
+                        const getTypeColor = (type: string) => {
+                          switch(type) {
+                            case 'Paper': return 'bg-blue-50 border-blue-100';
+                            case 'Plastic': return 'bg-yellow-50 border-yellow-100';
+                            case 'Metal': return 'bg-purple-50 border-purple-100';
+                            default: return 'bg-gray-50 border-gray-100';
+                          }
+                        };
+                        
+                        return (
+                          <div 
+                            key={item.id} 
+                            className={`group rounded-xl p-3 border transition-all duration-300 ${getTypeColor(item.type)}`}
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-2">
+                                  {getTypeIcon(item.type)}
+                                  <p className="text-sm font-semibold text-gray-800">{item.type}</p>
+                                </div>
+                                <div className="flex items-center gap-3 text-xs text-gray-500">
+                                  <div className="flex items-center gap-1">
+                                    <Calendar size={12} />
+                                    <span>{item.day}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Clock size={12} />
+                                    <span>{item.time}</span>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-300">
+                                <button 
+                                  onClick={() => {
+                                    setIsSidebarOpen(false);
+                                    setTimeout(() => openEditModal(item), 300);
+                                  }} 
+                                  className="p-1.5 text-blue-500 hover:bg-white rounded-lg transition-all"
+                                >
+                                  <Edit size={12} />
+                                </button>
+                                <button 
+                                  onClick={() => handleDelete(item.id)} 
+                                  className="p-1.5 text-red-500 hover:bg-white rounded-lg transition-all"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="text-center py-12">
+                        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <Truck size={24} className="text-gray-300" />
+                        </div>
+                        <p className="text-gray-500 text-sm">No pickups scheduled</p>
+                        <button 
+                          onClick={() => {
+                            setIsSidebarOpen(false);
+                            openAddModal();
+                          }} 
+                          className="mt-4 text-teal-600 text-sm font-medium hover:underline inline-flex items-center gap-1"
+                        >
+                          <Plus size={14} />
+                          Schedule pickup
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Footer - Add Button */}
+                <div className="p-4 border-t border-gray-100">
+                  <button 
+                    onClick={() => {
+                      setIsSidebarOpen(false);
+                      openAddModal();
+                    }} 
+                    className="w-full py-3 bg-teal-600 text-white rounded-xl text-sm font-medium hover:bg-teal-700 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Plus size={16} />
+                    Schedule New Pickup
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          </>
         )}
 
         {/* Pickup Modal */}

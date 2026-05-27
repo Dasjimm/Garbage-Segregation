@@ -7,6 +7,8 @@ import { useRecyclingData } from '@/app/context/RecyclingDataContext';
 import { useConfirmation } from '@/app/context/ConfirmationContext';
 import { useNotification } from '@/app/context/NotificationContext';
 import { supabase } from '@/app/lib/supabase';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import {
   Calendar,
   Filter,
@@ -34,7 +36,10 @@ import {
   RotateCcw,
   CheckSquare,
   Square,
-  AlertTriangle
+  AlertTriangle,
+  PieChart,
+  LineChart,
+  Activity
 } from 'lucide-react';
 
 const ARCHIVED_DATA_KEY = 'ecowaste_archived_reports';
@@ -72,6 +77,7 @@ export default function ReportsPage() {
   const [selectedReports, setSelectedReports] = useState<string[]>([]);
   const [isRestoring, setIsRestoring] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [formData, setFormData] = useState({
     date: '',
     paper: '',
@@ -246,7 +252,6 @@ export default function ReportsPage() {
   }, [error, showNotification]);
 
   // ========== TAB VISIBILITY FIX ==========
-  // Handle tab visibility - force refresh when returning to the tab
   useEffect(() => {
     let refreshTimeout: NodeJS.Timeout;
     
@@ -257,28 +262,22 @@ export default function ReportsPage() {
       console.log(`Tab visibility changed. Time since last active: ${timeSinceLastActive}ms`);
       
       if (document.visibilityState === 'visible') {
-        // If tab was inactive for more than 2 minutes, force reload
         if (timeSinceLastActive > 2 * 60 * 1000) {
           console.log('Tab was inactive for >2 minutes, forcing page reload...');
           window.location.reload();
           return;
         }
         
-        // Show live indicator
         setShowLiveIndicator(true);
         
-        // Clear any existing timeout
         if (refreshTimeout) clearTimeout(refreshTimeout);
         
-        // Refresh the data
         refreshTimeout = setTimeout(() => {
           setShowLiveIndicator(false);
         }, 2000);
         
-        // Update last active time
         setLastActiveTime(now);
       } else {
-        // Tab became inactive, update last active time
         setLastActiveTime(now);
       }
     };
@@ -290,7 +289,6 @@ export default function ReportsPage() {
     };
   }, [lastActiveTime]);
 
-  // Recover session when page becomes active again
   useEffect(() => {
     const recoverSession = async () => {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
@@ -307,7 +305,6 @@ export default function ReportsPage() {
     
     recoverSession();
     
-    // Also set up an interval to check session periodically (every 5 minutes)
     const interval = setInterval(() => {
       recoverSession();
     }, 5 * 60 * 1000);
@@ -315,7 +312,6 @@ export default function ReportsPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Update last active time periodically when tab is visible
   useEffect(() => {
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible') {
@@ -704,33 +700,344 @@ export default function ReportsPage() {
     });
   };
 
-  const exportToCSV = () => {
-    const headers = ['Date', 'Paper (kg)', 'Plastic (kg)', 'Metal (kg)', 'Total (kg)', 'Notes'];
-    const csvData = sortedRecords.map(r => [
-      r.date,
-      (r.paper || 0).toFixed(1),
-      (r.plastic || 0).toFixed(1),
-      (r.metal || 0).toFixed(1),
-      ((r.paper || 0) + (r.plastic || 0) + (r.metal || 0)).toFixed(1),
-      r.notes || ''
-    ]);
+  // Professional PDF Export for Reports & Analytics
+  const exportToPDF = async () => {
+    setIsExporting(true);
     
-    const csvContent = [
-      headers.join(','),
-      ...csvData.map(row => row.join(','))
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `recycling-report-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
+    try {
+      const element = document.createElement('div');
+      element.style.padding = '30px';
+      element.style.fontFamily = "'Segoe UI', 'Inter', Arial, sans-serif";
+      element.style.backgroundColor = 'white';
+      element.style.maxWidth = '1200px';
+      element.style.margin = '0 auto';
+      
+      // Load logo as base64 for PDF
+      let logoBase64 = '';
+      try {
+        const response = await fetch('/wastelogo.png');
+        if (response.ok) {
+          const blob = await response.blob();
+          logoBase64 = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(blob);
+          });
+        }
+      } catch (err) {
+        console.warn('Could not load logo:', err);
+      }
+      
+      // Calculate analytics data
+      const paperPercentage = ((totalPaper / grandTotal) * 100 || 0).toFixed(1);
+      const plasticPercentage = ((totalPlastic / grandTotal) * 100 || 0).toFixed(1);
+      const metalPercentage = ((totalMetal / grandTotal) * 100 || 0).toFixed(1);
+      
+      // Get top 10 records by total weight
+      const topRecords = [...sortedRecords]
+        .sort((a, b) => {
+          const totalA = (a.paper || 0) + (a.plastic || 0) + (a.metal || 0);
+          const totalB = (b.paper || 0) + (b.plastic || 0) + (b.metal || 0);
+          return totalB - totalA;
+        })
+        .slice(0, 10);
+      
+      element.innerHTML = `
+        <div style="margin-bottom: 30px;">
+          <!-- Header with Logo -->
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #0d9488; padding-bottom: 20px; margin-bottom: 25px;">
+            <div style="display: flex; align-items: center; gap: 15px;">
+              <div style="width: 60px; height: 60px; border-radius: 14px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); background: #1a5c3e; display: flex; align-items: center; justify-content: center;">
+                ${logoBase64 ? `<img src="${logoBase64}" style="width: 100%; height: 100%; object-fit: cover;" />` : `
+                  <svg width="50" height="50" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="100" height="100" rx="14" fill="#1a5c3e"/>
+                    <text x="50" y="28" text-anchor="middle" fill="white" font-size="12" font-weight="bold" font-family="Arial, sans-serif">BAN</text>
+                    <text x="50" y="42" text-anchor="middle" fill="#4ade80" font-size="8" font-family="Arial, sans-serif">PAPER</text>
+                    <text x="50" y="53" text-anchor="middle" fill="#fbbf24" font-size="8" font-family="Arial, sans-serif">PLASTIC</text>
+                    <text x="50" y="64" text-anchor="middle" fill="#c084fc" font-size="8" font-family="Arial, sans-serif">METAL</text>
+                    <text x="50" y="76" text-anchor="middle" fill="white" font-size="7" font-family="Arial, sans-serif">WASTE</text>
+                    <text x="50" y="87" text-anchor="middle" fill="#4ade80" font-size="6" font-family="Arial, sans-serif">SEGREGATION</text>
+                  </svg>
+                `}
+              </div>
+              <div>
+                <h1 style="color: #0f172a; font-size: 24px; font-weight: 700; margin: 0;">EcoWaste</h1>
+                <p style="color: #0d9488; font-size: 12px; margin: 2px 0 0 0; font-weight: 500;">Reports & Analytics</p>
+              </div>
+            </div>
+            <div style="text-align: right;">
+              <p style="color: #64748b; font-size: 11px; margin: 0;">ANALYTICS REPORT</p>
+              <p style="color: #94a3b8; font-size: 10px; margin: 4px 0 0 0;">Generated: ${new Date().toLocaleString()}</p>
+            </div>
+          </div>
+          
+          <!-- Report Title -->
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h2 style="color: #1e293b; font-size: 22px; margin: 0 0 8px 0;">Waste Management Analytics Report</h2>
+            <p style="color: #64748b; font-size: 13px; margin: 0;">Comprehensive recycling data analysis, trends, and performance metrics</p>
+          </div>
+          
+          <!-- Key Metrics Dashboard -->
+          <div style="margin-bottom: 35px;">
+            <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 15px; color: #1e293b; border-left: 4px solid #0d9488; padding-left: 12px;">📊 Key Performance Indicators</h3>
+            <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px;">
+              <div style="background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); padding: 15px; border-radius: 12px; text-align: center;">
+                <div style="font-size: 24px; margin-bottom: 6px;">📄</div>
+                <div style="font-size: 11px; color: #1e40af; font-weight: 600;">Paper Total</div>
+                <div style="font-size: 20px; font-weight: 800; color: #1e3a8a;">${totalPaper.toFixed(1)} kg</div>
+                <div style="font-size: 10px; color: #3b82f6;">${paperPercentage}% of total</div>
+              </div>
+              <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 15px; border-radius: 12px; text-align: center;">
+                <div style="font-size: 24px; margin-bottom: 6px;">🧴</div>
+                <div style="font-size: 11px; color: #92400e; font-weight: 600;">Plastic Total</div>
+                <div style="font-size: 20px; font-weight: 800; color: #b45309;">${totalPlastic.toFixed(1)} kg</div>
+                <div style="font-size: 10px; color: #eab308;">${plasticPercentage}% of total</div>
+              </div>
+              <div style="background: linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%); padding: 15px; border-radius: 12px; text-align: center;">
+                <div style="font-size: 24px; margin-bottom: 6px;">🔩</div>
+                <div style="font-size: 11px; color: #6b21a5; font-weight: 600;">Metal Total</div>
+                <div style="font-size: 20px; font-weight: 800; color: #7e22ce;">${totalMetal.toFixed(1)} kg</div>
+                <div style="font-size: 10px; color: #a855f7;">${metalPercentage}% of total</div>
+              </div>
+              <div style="background: linear-gradient(135deg, #ccfbf1 0%, #99f6e4 100%); padding: 15px; border-radius: 12px; text-align: center;">
+                <div style="font-size: 24px; margin-bottom: 6px;">♻️</div>
+                <div style="font-size: 11px; color: #0f766e; font-weight: 600;">Grand Total</div>
+                <div style="font-size: 20px; font-weight: 800; color: #0d9488;">${grandTotal.toFixed(1)} kg</div>
+                <div style="font-size: 10px; color: #14b8a6;">All materials</div>
+              </div>
+              <div style="background: linear-gradient(135deg, #fce7f3 0%, #fbcfe8 100%); padding: 15px; border-radius: 12px; text-align: center;">
+                <div style="font-size: 24px; margin-bottom: 6px;">📅</div>
+                <div style="font-size: 11px; color: #be185d; font-weight: 600;">Daily Average</div>
+                <div style="font-size: 20px; font-weight: 800; color: #db2777;">${averagePerDay.toFixed(1)} kg</div>
+                <div style="font-size: 10px; color: #ec4899;">Over ${wasteRecords.length} days</div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Material Breakdown Analytics -->
+          <div style="margin-bottom: 35px;">
+            <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 15px; color: #1e293b; border-left: 4px solid #0d9488; padding-left: 12px;">📈 Material Composition Analysis</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+              <div>
+                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                  <thead>
+                    <tr style="background-color: #f1f5f9; border-bottom: 2px solid #cbd5e1;">
+                      <th style="padding: 10px; text-align: left;">Material</th>
+                      <th style="padding: 10px; text-align: right;">Total (kg)</th>
+                      <th style="padding: 10px; text-align: right;">Daily Avg (kg)</th>
+                      <th style="padding: 10px; text-align: right;">Share</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr style="border-bottom: 1px solid #e2e8f0;">
+                      <td style="padding: 8px;">📄 Paper</td>
+                      <td style="padding: 8px; text-align: right;">${totalPaper.toFixed(1)}</td>
+                      <td style="padding: 8px; text-align: right;">${averagePaper.toFixed(1)}</td>
+                      <td style="padding: 8px; text-align: right; font-weight: 600; color: #3b82f6;">${paperPercentage}%</td>
+                    </tr>
+                    <tr style="border-bottom: 1px solid #e2e8f0; background-color: #fafafa;">
+                      <td style="padding: 8px;">🧴 Plastic</td>
+                      <td style="padding: 8px; text-align: right;">${totalPlastic.toFixed(1)}</td>
+                      <td style="padding: 8px; text-align: right;">${averagePlastic.toFixed(1)}</td>
+                      <td style="padding: 8px; text-align: right; font-weight: 600; color: #eab308;">${plasticPercentage}%</td>
+                    </tr>
+                    <tr style="border-bottom: 1px solid #e2e8f0;">
+                      <td style="padding: 8px;">🔩 Metal</td>
+                      <td style="padding: 8px; text-align: right;">${totalMetal.toFixed(1)}</td>
+                      <td style="padding: 8px; text-align: right;">${averageMetal.toFixed(1)}</td>
+                      <td style="padding: 8px; text-align: right; font-weight: 600; color: #a855f7;">${metalPercentage}%</td>
+                    </tr>
+                    <tr style="background-color: #f0fdf4; border-top: 2px solid #dcfce7;">
+                      <td style="padding: 8px; font-weight: 700;">♻️ Total</td>
+                      <td style="padding: 8px; text-align: right; font-weight: 700;">${grandTotal.toFixed(1)} kg</td>
+                      <td style="padding: 8px; text-align: right; font-weight: 700;">${averagePerDay.toFixed(1)} kg</td>
+                      <td style="padding: 8px; text-align: right; font-weight: 700;">100%</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div>
+                <div style="margin-bottom: 15px;">
+                  <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 12px;">
+                    <span>📄 Paper</span>
+                    <span style="font-weight: 600;">${paperPercentage}%</span>
+                  </div>
+                  <div style="background-color: #e2e8f0; border-radius: 8px; height: 20px; overflow: hidden;">
+                    <div style="background-color: #3b82f6; width: ${paperPercentage}%; height: 20px; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; color: white; font-size: 10px; font-weight: 500;">
+                      ${parseFloat(paperPercentage) > 10 ? `${paperPercentage}%` : ''}
+                    </div>
+                  </div>
+                </div>
+                <div style="margin-bottom: 15px;">
+                  <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 12px;">
+                    <span>🧴 Plastic</span>
+                    <span style="font-weight: 600;">${plasticPercentage}%</span>
+                  </div>
+                  <div style="background-color: #e2e8f0; border-radius: 8px; height: 20px; overflow: hidden;">
+                    <div style="background-color: #eab308; width: ${plasticPercentage}%; height: 20px; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; color: white; font-size: 10px; font-weight: 500;">
+                      ${parseFloat(plasticPercentage) > 10 ? `${plasticPercentage}%` : ''}
+                    </div>
+                  </div>
+                </div>
+                <div style="margin-bottom: 15px;">
+                  <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 12px;">
+                    <span>🔩 Metal</span>
+                    <span style="font-weight: 600;">${metalPercentage}%</span>
+                  </div>
+                  <div style="background-color: #e2e8f0; border-radius: 8px; height: 20px; overflow: hidden;">
+                    <div style="background-color: #a855f7; width: ${metalPercentage}%; height: 20px; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; color: white; font-size: 10px; font-weight: 500;">
+                      ${parseFloat(metalPercentage) > 10 ? `${metalPercentage}%` : ''}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Top Records Analytics -->
+          <div style="margin-bottom: 30px;">
+            <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 15px; color: #1e293b; border-left: 4px solid #0d9488; padding-left: 12px;">🏆 Top 10 Records by Volume</h3>
+            <div style="overflow-x: auto;">
+              <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                <thead>
+                  <tr style="background-color: #f1f5f9; border-bottom: 2px solid #cbd5e1;">
+                    <th style="padding: 10px; text-align: left;">Rank</th>
+                    <th style="padding: 10px; text-align: left;">Date</th>
+                    <th style="padding: 10px; text-align: right;">Paper (kg)</th>
+                    <th style="padding: 10px; text-align: right;">Plastic (kg)</th>
+                    <th style="padding: 10px; text-align: right;">Metal (kg)</th>
+                    <th style="padding: 10px; text-align: right;">Total (kg)</th>
+                    <th style="padding: 10px; text-align: left;">Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${topRecords.map((record, index) => {
+                    const total = (record.paper || 0) + (record.plastic || 0) + (record.metal || 0);
+                    return `
+                      <tr style="border-bottom: 1px solid #e2e8f0;">
+                        <td style="padding: 8px; font-weight: 600; color: ${index < 3 ? '#0d9488' : '#64748b'};">${index + 1}${index < 3 ? ' 🏆' : ''}</td>
+                        <td style="padding: 8px;">${record.date}</td>
+                        <td style="padding: 8px; text-align: right; font-weight: 500; color: #3b82f6;">${(record.paper || 0).toFixed(1)}</td>
+                        <td style="padding: 8px; text-align: right; font-weight: 500; color: #eab308;">${(record.plastic || 0).toFixed(1)}</td>
+                        <td style="padding: 8px; text-align: right; font-weight: 500; color: #a855f7;">${(record.metal || 0).toFixed(1)}</td>
+                        <td style="padding: 8px; text-align: right; font-weight: 600;">${total.toFixed(1)}</td>
+                        <td style="padding: 8px; color: #64748b;">${record.notes || '-'}</td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          
+          <!-- Recent Activity -->
+          <div style="margin-bottom: 30px;">
+            <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 15px; color: #1e293b; border-left: 4px solid #0d9488; padding-left: 12px;">📋 Recent Recycling Activity</h3>
+            <div style="overflow-x: auto;">
+              <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                <thead>
+                  <tr style="background-color: #f1f5f9; border-bottom: 2px solid #cbd5e1;">
+                    <th style="padding: 10px; text-align: left;">Date</th>
+                    <th style="padding: 10px; text-align: right;">Paper (kg)</th>
+                    <th style="padding: 10px; text-align: right;">Plastic (kg)</th>
+                    <th style="padding: 10px; text-align: right;">Metal (kg)</th>
+                    <th style="padding: 10px; text-align: right;">Total (kg)</th>
+                    <th style="padding: 10px; text-align: left;">Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${sortedRecords.slice(0, 15).map(record => {
+                    const total = (record.paper || 0) + (record.plastic || 0) + (record.metal || 0);
+                    return `
+                      <tr style="border-bottom: 1px solid #e2e8f0;">
+                        <td style="padding: 8px;">${record.date}</td>
+                        <td style="padding: 8px; text-align: right; font-weight: 500; color: #3b82f6;">${(record.paper || 0).toFixed(1)}</td>
+                        <td style="padding: 8px; text-align: right; font-weight: 500; color: #eab308;">${(record.plastic || 0).toFixed(1)}</td>
+                        <td style="padding: 8px; text-align: right; font-weight: 500; color: #a855f7;">${(record.metal || 0).toFixed(1)}</td>
+                        <td style="padding: 8px; text-align: right; font-weight: 600;">${total.toFixed(1)}</td>
+                        <td style="padding: 8px; color: #64748b;">${record.notes || '-'}</td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+              ${sortedRecords.length > 15 ? `<p style="text-align: center; font-size: 11px; color: #64748b; margin-top: 12px;">* Showing latest 15 of ${sortedRecords.length} records</p>` : ''}
+            </div>
+          </div>
+          
+          <!-- Footer with Copyright and Page Number -->
+          <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: #94a3b8;">
+            <div>© ${new Date().getFullYear()} EcoWaste Recycling Management System. All rights reserved. | Analytics Report</div>
+            <div style="font-family: monospace;">PAGE 1 OF 1</div>
+          </div>
+        </div>
+      `;
+      
+      document.body.appendChild(element);
+      
+      const canvas = await html2canvas(element, {
+        scale: 2.5,
+        logging: false,
+        useCORS: true,
+        backgroundColor: '#ffffff'
+      });
+      
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+      
+      const imgWidth = 210;
+      const pageHeight = 297;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      let position = 0;
+      let pageCount = 1;
+      
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+      
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+        pageCount++;
+      }
+      
+      for (let i = 1; i <= pageCount; i++) {
+        pdf.setPage(i);
+        pdf.setFontSize(9);
+        pdf.setTextColor(150, 150, 150);
+        pdf.text(`PAGE ${i} OF ${pageCount}`, pdf.internal.pageSize.getWidth() - 30, pdf.internal.pageSize.getHeight() - 10);
+        pdf.text(`© ${new Date().getFullYear()} EcoWaste Recycling Management System`, 15, pdf.internal.pageSize.getHeight() - 10);
+      }
+      
+      pdf.save(`EcoWaste_Analytics_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+      
+      document.body.removeChild(element);
+      
+      showNotification({
+        message: 'Analytics Report exported successfully!',
+        type: 'success',
+        duration: 3000
+      });
+    } catch (error) {
+      console.error('PDF export error:', error);
+      showNotification({
+        message: 'Failed to export PDF. Please try again.',
+        type: 'error',
+        duration: 3000
+      });
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const MobileView = () => (
     <div className="w-full px-2 py-3 animate-fade-in">
-      {/* Header - Removed title, only kept action buttons */}
       <div className="flex flex-col gap-3 mb-4">
         <div className="flex justify-end">
           {showLiveIndicator && (
@@ -742,17 +1049,22 @@ export default function ReportsPage() {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={exportToCSV}
-            className="flex-1 px-3 py-2 border border-gray-300 text-gray-700 rounded-lg text-xs font-medium hover:bg-gray-50 flex items-center justify-center gap-1"
+            onClick={exportToPDF}
+            disabled={isExporting}
+            className="flex-1 px-3 py-2 bg-teal-600 text-white rounded-lg text-xs font-medium hover:bg-teal-700 flex items-center justify-center gap-1 disabled:opacity-50"
           >
-            <Download size={14} />
-            Export
+            {isExporting ? (
+              <RefreshCw size={14} className="animate-spin" />
+            ) : (
+              <Download size={14} />
+            )}
+            Export Report
           </button>
           <button
             onClick={openAddModal}
-            className="flex-1 px-3 py-2 bg-teal-600 text-white rounded-lg text-xs font-medium hover:bg-teal-700 flex items-center justify-center gap-1 animate-bounce-in"
+            className="flex-1 px-3 py-2 bg-teal-600 text-white rounded-lg text-xs font-medium hover:bg-teal-700 flex items-center justify-center gap-1"
           >
-            <Plus size={14} className="animate-rotate-in" />
+            <Plus size={14} />
             Add
           </button>
           <button
@@ -894,7 +1206,6 @@ export default function ReportsPage() {
 
   const DesktopView = () => (
     <div className="w-full px-2 sm:px-3 md:px-4 lg:px-5 xl:px-6 py-3 sm:py-4 md:py-5 lg:py-6 animate-fade-in">
-      {/* Header - Removed title, kept action buttons aligned to right */}
       <div className="flex flex-col sm:flex-row justify-end items-end gap-3 mb-4 sm:mb-5 md:mb-6">
         <div className="flex gap-2 w-full sm:w-auto">
           <button
@@ -905,23 +1216,32 @@ export default function ReportsPage() {
             <span>History</span>
           </button>
           <button
-            onClick={exportToCSV}
-            className="flex-1 sm:flex-none px-3 sm:px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-50 hover:scale-105 transition-all duration-200 flex items-center justify-center gap-2"
+            onClick={exportToPDF}
+            disabled={isExporting}
+            className="flex-1 sm:flex-none px-3 sm:px-4 py-2 bg-teal-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-teal-700 hover:scale-105 transition-all duration-200 flex items-center justify-center gap-2 shadow-md disabled:opacity-50"
           >
-            <Download size={16} />
-            <span>Export</span>
+            {isExporting ? (
+              <>
+                <RefreshCw size={16} className="animate-spin" />
+                <span>Generating...</span>
+              </>
+            ) : (
+              <>
+                <Download size={16} />
+                <span>Export Analytics Report</span>
+              </>
+            )}
           </button>
           <button
             onClick={openAddModal}
-            className="flex-1 sm:flex-none px-3 sm:px-4 py-2 bg-teal-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-teal-700 hover:scale-105 transition-all duration-200 flex items-center justify-center gap-2 shadow-md animate-bounce-in"
+            className="flex-1 sm:flex-none px-3 sm:px-4 py-2 bg-teal-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-teal-700 hover:scale-105 transition-all duration-200 flex items-center justify-center gap-2 shadow-md"
           >
-            <Plus size={16} className="animate-rotate-in" />
+            <Plus size={16} />
             <span>Add</span>
           </button>
         </div>
       </div>
 
-      {/* Live indicator moved to top right */}
       {showLiveIndicator && (
         <div className="flex justify-end mb-2">
           <div className="flex items-center gap-1 bg-green-100 text-green-700 px-2 py-1 rounded-full animate-pulse text-xs">
@@ -1122,10 +1442,8 @@ export default function ReportsPage() {
         isOpen={isModalOpen}
         onClose={closeModal}
         onSave={async (data) => {
-          // Set the form data from modal
           setFormData(data);
           
-          // Then call your existing submit logic
           if (!data.date || !data.paper || !data.plastic || !data.metal) {
             showNotification({
               message: 'Please fill all required fields before saving',

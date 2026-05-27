@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import ProtectedLayout from '@/app/components/ProtectedLayout';
 import { useRecyclingData } from '@/app/context/RecyclingDataContext';
 import { useConfirmation } from '@/app/context/ConfirmationContext';
@@ -20,8 +20,13 @@ import {
   Filter,
   ArrowUpDown,
   BarChart3,
-  TrendingUp
+  TrendingUp,
+  Printer,
+  Leaf
 } from 'lucide-react';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
+import Image from 'next/image';
 
 interface Disposal {
   id: number;
@@ -46,6 +51,9 @@ export default function RecyclingSegregationPage() {
   const [filterType, setFilterType] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [isMobile, setIsMobile] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [showPrintReport, setShowPrintReport] = useState(false);
+  const reportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const checkScreenSize = () => {
@@ -256,28 +264,272 @@ export default function RecyclingSegregationPage() {
     });
   };
 
-  const exportToCSV = () => {
-    const headers = ['Date', 'Type', 'Item', 'Time', 'Weight (kg)', 'Location'];
-    const csvData = disposals.map(d => [
-      d.date,
-      d.type,
-      d.item,
-      d.time,
-      d.weight,
-      d.location || 'N/A'
-    ]);
+  // Professional PDF Export with Your WebApp Logo - COMPLETE VERSION
+  const exportToPDF = async () => {
+    setIsExporting(true);
     
-    const csvContent = [
-      headers.join(','),
-      ...csvData.map(row => row.join(','))
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `recycling-segregation-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
+    try {
+      const element = document.createElement('div');
+      element.style.padding = '30px';
+      element.style.fontFamily = "'Segoe UI', 'Inter', Arial, sans-serif";
+      element.style.backgroundColor = 'white';
+      element.style.maxWidth = '1200px';
+      element.style.margin = '0 auto';
+      
+      // Load your webapp logo as base64 for PDF
+      let logoBase64 = '';
+      try {
+        const response = await fetch('/wastelogo.png');
+        if (response.ok) {
+          const blob = await response.blob();
+          logoBase64 = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(blob);
+          });
+        }
+      } catch (err) {
+        console.warn('Could not load logo:', err);
+      }
+      
+      element.innerHTML = `
+        <div style="margin-bottom: 30px;">
+          <!-- Header with Your WebApp Logo -->
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #0d9488; padding-bottom: 20px; margin-bottom: 25px;">
+            <div style="display: flex; align-items: center; gap: 15px;">
+              <div style="width: 60px; height: 60px; border-radius: 14px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); background: #1a5c3e; display: flex; align-items: center; justify-content: center;">
+                ${logoBase64 ? `<img src="${logoBase64}" style="width: 100%; height: 100%; object-fit: cover;" />` : `
+                  <svg width="50" height="50" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="100" height="100" rx="14" fill="#1a5c3e"/>
+                    <text x="50" y="28" text-anchor="middle" fill="white" font-size="12" font-weight="bold" font-family="Arial, sans-serif">BAN</text>
+                    <text x="50" y="42" text-anchor="middle" fill="#4ade80" font-size="8" font-family="Arial, sans-serif">PAPER</text>
+                    <text x="50" y="53" text-anchor="middle" fill="#fbbf24" font-size="8" font-family="Arial, sans-serif">PLASTIC</text>
+                    <text x="50" y="64" text-anchor="middle" fill="#c084fc" font-size="8" font-family="Arial, sans-serif">METAL</text>
+                    <text x="50" y="76" text-anchor="middle" fill="white" font-size="7" font-family="Arial, sans-serif">WASTE</text>
+                    <text x="50" y="87" text-anchor="middle" fill="#4ade80" font-size="6" font-family="Arial, sans-serif">SEGREGATION</text>
+                  </svg>
+                `}
+              </div>
+              <div>
+                <h1 style="color: #0f172a; font-size: 24px; font-weight: 700; margin: 0;">EcoWaste</h1>
+                <p style="color: #0d9488; font-size: 12px; margin: 2px 0 0 0; font-weight: 500;">Recycling Management System</p>
+              </div>
+            </div>
+            <div style="text-align: right;">
+              <p style="color: #64748b; font-size: 11px; margin: 0;">OFFICIAL REPORT</p>
+              <p style="color: #94a3b8; font-size: 10px; margin: 4px 0 0 0;">Generated: ${new Date().toLocaleString()}</p>
+            </div>
+          </div>
+          
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h2 style="color: #1e293b; font-size: 22px; margin: 0 0 8px 0;">Segregation Report</h2>
+            <p style="color: #64748b; font-size: 13px; margin: 0;">Comprehensive waste composition analysis & material tracking</p>
+          </div>
+          
+          <!-- Summary Statistics Cards -->
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 35px;">
+            <div style="background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); padding: 18px; border-radius: 16px; text-align: center;">
+              <div style="font-size: 28px; margin-bottom: 8px;">📄</div>
+              <div style="font-size: 12px; color: #1e40af; font-weight: 600; margin-bottom: 4px;">PAPER WASTE</div>
+              <div style="font-size: 28px; font-weight: 800; color: #1e3a8a;">${totalPaper.toFixed(1)} <span style="font-size: 14px;">kg</span></div>
+              <div style="font-size: 11px; color: #3b82f6;">Daily avg: ${averagePaper.toFixed(1)} kg</div>
+            </div>
+            <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 18px; border-radius: 16px; text-align: center;">
+              <div style="font-size: 28px; margin-bottom: 8px;">🧴</div>
+              <div style="font-size: 12px; color: #92400e; font-weight: 600; margin-bottom: 4px;">PLASTIC WASTE</div>
+              <div style="font-size: 28px; font-weight: 800; color: #b45309;">${totalPlastic.toFixed(1)} <span style="font-size: 14px;">kg</span></div>
+              <div style="font-size: 11px; color: #eab308;">Daily avg: ${averagePlastic.toFixed(1)} kg</div>
+            </div>
+            <div style="background: linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%); padding: 18px; border-radius: 16px; text-align: center;">
+              <div style="font-size: 28px; margin-bottom: 8px;">🔩</div>
+              <div style="font-size: 12px; color: #6b21a5; font-weight: 600; margin-bottom: 4px;">METAL WASTE</div>
+              <div style="font-size: 28px; font-weight: 800; color: #7e22ce;">${totalMetal.toFixed(1)} <span style="font-size: 14px;">kg</span></div>
+              <div style="font-size: 11px; color: #a855f7;">Daily avg: ${averageMetal.toFixed(1)} kg</div>
+            </div>
+            <div style="background: linear-gradient(135deg, #ccfbf1 0%, #99f6e4 100%); padding: 18px; border-radius: 16px; text-align: center;">
+              <div style="font-size: 28px; margin-bottom: 8px;">♻️</div>
+              <div style="font-size: 12px; color: #0f766e; font-weight: 600; margin-bottom: 4px;">GRAND TOTAL</div>
+              <div style="font-size: 28px; font-weight: 800; color: #0d9488;">${grandTotal.toFixed(1)} <span style="font-size: 14px;">kg</span></div>
+              <div style="font-size: 11px; color: #14b8a6;">Over ${wasteRecords.length} days</div>
+            </div>
+          </div>
+          
+          <!-- Statistics Table -->
+          <div style="margin-bottom: 35px;">
+            <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 15px; color: #1e293b; border-left: 4px solid #0d9488; padding-left: 12px;">📊 Material Breakdown Summary</h3>
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+              <thead>
+                <tr style="background-color: #f1f5f9; border-bottom: 2px solid #cbd5e1;">
+                  <th style="padding: 12px; text-align: left;">Material Type</th>
+                  <th style="padding: 12px; text-align: right;">Total (kg)</th>
+                  <th style="padding: 12px; text-align: right;">Daily Average (kg)</th>
+                  <th style="padding: 12px; text-align: right;">Percentage</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style="border-bottom: 1px solid #e2e8f0;">
+                  <td style="padding: 12px;">📄 Paper</td>
+                  <td style="padding: 12px; text-align: right;">${totalPaper.toFixed(1)}</td>
+                  <td style="padding: 12px; text-align: right;">${averagePaper.toFixed(1)}</td>
+                  <td style="padding: 12px; text-align: right; font-weight: 600; color: #3b82f6;">${((totalPaper / grandTotal) * 100 || 0).toFixed(1)}%</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #e2e8f0; background-color: #fafafa;">
+                  <td style="padding: 12px;">🧴 Plastic</td>
+                  <td style="padding: 12px; text-align: right;">${totalPlastic.toFixed(1)}</td>
+                  <td style="padding: 12px; text-align: right;">${averagePlastic.toFixed(1)}</td>
+                  <td style="padding: 12px; text-align: right; font-weight: 600; color: #eab308;">${((totalPlastic / grandTotal) * 100 || 0).toFixed(1)}%</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #e2e8f0;">
+                  <td style="padding: 12px;">🔩 Metal</td>
+                  <td style="padding: 12px; text-align: right;">${totalMetal.toFixed(1)}</td>
+                  <td style="padding: 12px; text-align: right;">${averageMetal.toFixed(1)}</td>
+                  <td style="padding: 12px; text-align: right; font-weight: 600; color: #a855f7;">${((totalMetal / grandTotal) * 100 || 0).toFixed(1)}%</td>
+                </tr>
+                <tr style="background-color: #f0fdf4; border-top: 2px solid #dcfce7;">
+                  <td style="padding: 12px; font-weight: 700;">♻️ Grand Total</td>
+                  <td style="padding: 12px; text-align: right; font-weight: 700;">${grandTotal.toFixed(1)} kg</td>
+                  <td style="padding: 12px; text-align: right; font-weight: 700;">${averagePerDay.toFixed(1)} kg</td>
+                  <td style="padding: 12px; text-align: right; font-weight: 700;">100%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          
+          <!-- Progress Bars Section -->
+          <div style="margin-bottom: 35px;">
+            <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 15px; color: #1e293b; border-left: 4px solid #0d9488; padding-left: 12px;">📈 Composition Distribution</h3>
+            <div style="margin-bottom: 15px;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 12px;">
+                <span>📄 Paper</span>
+                <span style="font-weight: 600;">${((totalPaper / grandTotal) * 100 || 0).toFixed(1)}%</span>
+              </div>
+              <div style="background-color: #e2e8f0; border-radius: 10px; height: 12px; overflow: hidden;">
+                <div style="background-color: #3b82f6; width: ${((totalPaper / grandTotal) * 100 || 0)}%; height: 12px;"></div>
+              </div>
+            </div>
+            <div style="margin-bottom: 15px;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 12px;">
+                <span>🧴 Plastic</span>
+                <span style="font-weight: 600;">${((totalPlastic / grandTotal) * 100 || 0).toFixed(1)}%</span>
+              </div>
+              <div style="background-color: #e2e8f0; border-radius: 10px; height: 12px; overflow: hidden;">
+                <div style="background-color: #eab308; width: ${((totalPlastic / grandTotal) * 100 || 0)}%; height: 12px;"></div>
+              </div>
+            </div>
+            <div style="margin-bottom: 15px;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 12px;">
+                <span>🔩 Metal</span>
+                <span style="font-weight: 600;">${((totalMetal / grandTotal) * 100 || 0).toFixed(1)}%</span>
+              </div>
+              <div style="background-color: #e2e8f0; border-radius: 10px; height: 12px; overflow: hidden;">
+                <div style="background-color: #a855f7; width: ${((totalMetal / grandTotal) * 100 || 0)}%; height: 12px;"></div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Detailed Records -->
+          <div style="margin-bottom: 30px;">
+            <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 15px; color: #1e293b; border-left: 4px solid #0d9488; padding-left: 12px;">📋 Detailed Segregation Logs</h3>
+            <div style="overflow-x: auto;">
+              <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                <thead>
+                  <tr style="background-color: #f1f5f9; border-bottom: 2px solid #cbd5e1;">
+                    <th style="padding: 10px; text-align: left;">Date</th>
+                    <th style="padding: 10px; text-align: left;">Type</th>
+                    <th style="padding: 10px; text-align: left;">Item Description</th>
+                    <th style="padding: 10px; text-align: right;">Weight (kg)</th>
+                    <th style="padding: 10px; text-align: left;">Location</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${disposals.slice(0, 15).map(d => `
+                    <tr style="border-bottom: 1px solid #e2e8f0;">
+                      <td style="padding: 10px;">${d.date}</td>
+                      <td style="padding: 10px;">
+                        <span style="background: ${d.type === 'Paper' ? '#dbeafe' : d.type === 'Plastic' ? '#fef3c7' : '#f3e8ff'}; color: ${d.type === 'Paper' ? '#1e40af' : d.type === 'Plastic' ? '#92400e' : '#6b21a5'}; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 500;">
+                          ${d.type}
+                        </span>
+                      </td>
+                      <td style="padding: 10px;">${d.item}</td>
+                      <td style="padding: 10px; text-align: right; font-weight: 500;">${d.weight}</td>
+                      <td style="padding: 10px;">${d.location || 'N/A'}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+              ${disposals.length > 15 ? `<p style="text-align: center; font-size: 11px; color: #64748b; margin-top: 12px;">* Showing latest 15 of ${disposals.length} records</p>` : ''}
+            </div>
+          </div>
+          
+          <!-- Footer with Copyright and Page Number -->
+          <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: #94a3b8;">
+            <div>© ${new Date().getFullYear()} EcoWaste Recycling Management System. All rights reserved.</div>
+            <div style="font-family: monospace;">PAGE 1 OF 1</div>
+          </div>
+        </div>
+      `;
+      
+      document.body.appendChild(element);
+      
+      const canvas = await html2canvas(element, {
+        scale: 2.5,
+        logging: false,
+        useCORS: true,
+        backgroundColor: '#ffffff'
+      });
+      
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+      
+      const imgWidth = 210;
+      const pageHeight = 297;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      let position = 0;
+      let pageCount = 1;
+      
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+      
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+        pageCount++;
+      }
+      
+      for (let i = 1; i <= pageCount; i++) {
+        pdf.setPage(i);
+        pdf.setFontSize(9);
+        pdf.setTextColor(150, 150, 150);
+        pdf.text(`PAGE ${i} OF ${pageCount}`, pdf.internal.pageSize.getWidth() - 30, pdf.internal.pageSize.getHeight() - 10);
+        pdf.text(`© ${new Date().getFullYear()} EcoWaste Recycling Management System`, 15, pdf.internal.pageSize.getHeight() - 10);
+      }
+      
+      pdf.save(`EcoWaste_Recycling_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+      
+      document.body.removeChild(element);
+      
+      showNotification({
+        message: 'Professional PDF exported successfully!',
+        type: 'success',
+        duration: 3000
+      });
+    } catch (error) {
+      console.error('PDF export error:', error);
+      showNotification({
+        message: 'Failed to export PDF. Please try again.',
+        type: 'error',
+        duration: 3000
+      });
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const getTypeColor = (type: string) => {
@@ -303,16 +555,25 @@ export default function RecyclingSegregationPage() {
       <div className="w-full overflow-x-hidden animate-fade-in">
         <div className="w-full px-3 sm:px-4 md:px-5 lg:px-6 py-4 sm:py-5 md:py-6 lg:py-8">
           
-          {/* Header - Removed title and description, only kept export button */}
+          {/* Header with Export Button Only */}
           <div className="flex flex-col sm:flex-row justify-end items-end gap-3 mb-6 sm:mb-8">
             <div className="flex gap-2 w-full sm:w-auto">
               <button
-                onClick={exportToCSV}
-                className="flex-1 sm:flex-none px-3 sm:px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-50 hover:scale-105 transition-all duration-200 flex items-center justify-center gap-2"
+                onClick={exportToPDF}
+                disabled={isExporting}
+                className="flex-1 sm:flex-none px-4 py-2 bg-gradient-to-r from-teal-600 to-teal-700 text-white rounded-lg text-sm font-medium hover:from-teal-700 hover:to-teal-800 hover:scale-105 transition-all duration-200 flex items-center justify-center gap-2 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Download size={16} />
-                <span className="hidden sm:inline">Export CSV</span>
-                <span className="sm:hidden">Export</span>
+                {isExporting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Generating...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download size={16} />
+                    <span>Export Professional PDF</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
