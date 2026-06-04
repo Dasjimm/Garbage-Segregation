@@ -1504,7 +1504,6 @@ export default function DashboardPage() {
           </>
         )}
 
-        {/* Pickup Modal */}
         <PickupModal 
           isOpen={isModalOpen}
           onClose={closeModal}
@@ -1516,3 +1515,5 @@ export default function DashboardPage() {
     </AuthGuard>
   );
 }
+
+

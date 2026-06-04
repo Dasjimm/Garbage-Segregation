@@ -360,11 +360,11 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess, initialMode 
               <div className="flex justify-center mb-3">
                 <div className="w-20 h-20 relative">
                   <Image
-                    src="/wastelogo.png"
-                    alt="EcoWaste Logo"
+                    src="/banicainlogo.jpg"
+                    alt="Barangay Banicain Logo"
                     width={80}
                     height={80}
-                    className="object-contain w-full h-full"
+                    className="object-contain w-full h-full rounded-full"
                   />
                 </div>
               </div>
@@ -373,8 +373,8 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess, initialMode 
               </h2>
               <p className="mt-1.5 text-sm text-teal-900/80">
                 {mode === "login"
-                  ? "Sign in to access the admin dashboard"
-                  : "Register a new admin account"}
+                  ? "Sign in to access the barangay dashboard"
+                  : "Register a new barangay admin account"}
               </p>
             </div>
 
