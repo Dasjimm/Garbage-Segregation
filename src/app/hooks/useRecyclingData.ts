@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { recyclingService } from '@/app/lib/recyclingService';
 import { DailyRecycling, DailyRecyclingInput } from '@/app/types/database';
 
@@ -10,15 +10,29 @@ export function useRecyclingData() {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
 
-
-  useEffect(() => {
-    fetchRecords();
+  const fetchRecords = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await recyclingService.getAllRecords();
+      setRecords(data);
+    } catch (err: any) {
+      console.error('Error fetching records:', err);
+      setError(err.message || 'Failed to load records');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
+    fetchRecords();
+  }, [fetchRecords]);
+
+  // Real-time subscription - FIXED
+  useEffect(() => {
     console.log('Setting up real-time subscription...');
     
-    const subscription = recyclingService.subscribeToChanges((payload) => {
+    const unsubscribe = recyclingService.subscribeToChanges((payload) => {
       console.log('🔴 Real-time update received:', payload);
       
       try {
@@ -44,28 +58,18 @@ export function useRecyclingData() {
 
     return () => {
       console.log('Cleaning up real-time subscription');
-      subscription.unsubscribe();
+      if (unsubscribe && typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
     };
   }, []);
-
-  const fetchRecords = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await recyclingService.getAllRecords();
-      setRecords(data);
-    } catch (err: any) {
-      console.error('Error fetching records:', err);
-      setError(err.message || 'Failed to load records');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const addRecord = async (record: DailyRecyclingInput) => {
     try {
       setError(null);
       const newRecord = await recyclingService.insertRecord(record);
+      setRecords(prev => [newRecord, ...prev]);
+      setLastUpdate(new Date());
       return newRecord;
     } catch (err: any) {
       console.error('Error adding record:', err);
@@ -78,6 +82,8 @@ export function useRecyclingData() {
     try {
       setError(null);
       const updated = await recyclingService.updateRecord(id, record);
+      setRecords(prev => prev.map(r => r.id === id ? updated : r));
+      setLastUpdate(new Date());
       return updated;
     } catch (err: any) {
       console.error('Error updating record:', err);
@@ -90,6 +96,8 @@ export function useRecyclingData() {
     try {
       setError(null);
       await recyclingService.deleteRecord(id);
+      setRecords(prev => prev.filter(r => r.id !== id));
+      setLastUpdate(new Date());
     } catch (err: any) {
       console.error('Error deleting record:', err);
       setError(err.message);
@@ -101,6 +109,8 @@ export function useRecyclingData() {
     try {
       setError(null);
       const result = await recyclingService.upsertRecord(record);
+      await fetchRecords(); // Refresh all records
+      setLastUpdate(new Date());
       return result;
     } catch (err: any) {
       console.error('Error upserting record:', err);

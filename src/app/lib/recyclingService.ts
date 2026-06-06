@@ -14,65 +14,60 @@ export interface WasteRecord {
   user_id?: string;
 }
 
+export interface DailyRecyclingInput {
+  date: string;
+  paper: number;
+  plastic: number;
+  metal: number;
+  notes?: string;
+}
+
 export const recyclingService = {
-  // Get all records for the current user
+  // Get all records
   async getAllRecords(): Promise<WasteRecord[]> {
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+
+      const { data, error } = await supabase
+        .from('waste_records')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('date', { ascending: false });
+
+      if (error) throw new Error(error.message);
+      return data || [];
+    } catch (error) {
+      console.error('Error in getAllRecords:', error);
       return [];
     }
-
-    const { data, error } = await supabase
-      .from('waste_records')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('date', { ascending: false });
-
-    if (error) {
-      console.error('Error fetching records:', error);
-      throw new Error(error.message);
-    }
-
-    return data || [];
   },
 
   // Get record by date
   async getRecordByDate(date: string): Promise<WasteRecord | null> {
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+
+      const { data, error } = await supabase
+        .from('waste_records')
+        .select('*')
+        .eq('date', date)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (error) throw new Error(error.message);
+      return data;
+    } catch (error) {
+      console.error('Error in getRecordByDate:', error);
       return null;
     }
-
-    const { data, error } = await supabase
-      .from('waste_records')
-      .select('*')
-      .eq('date', date)
-      .eq('user_id', user.id)
-      .single();
-
-    if (error && error.code !== 'PGRST116') { // PGRST116 means no rows returned
-      console.error('Error fetching record by date:', error);
-      throw new Error(error.message);
-    }
-
-    return data;
   },
 
-  // Add new record
-  async addRecord(record: {
-    date: string;
-    paper: number;
-    plastic: number;
-    metal: number;
-    notes?: string;
-  }): Promise<WasteRecord> {
+  // Insert new record
+  async insertRecord(record: DailyRecyclingInput): Promise<WasteRecord> {
     const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
-      throw new Error('User not authenticated');
-    }
+    if (!user) throw new Error('User not authenticated');
 
     const total = record.paper + record.plastic + record.metal;
 
@@ -90,37 +85,34 @@ export const recyclingService = {
       .select()
       .single();
 
-    if (error) {
-      console.error('Error adding record:', error);
-      throw new Error(error.message);
-    }
-
+    if (error) throw new Error(error.message);
     return data;
   },
 
-  // Update existing record
-  async updateRecord(id: number, updates: {
-    date?: string;
-    paper?: number;
-    plastic?: number;
-    metal?: number;
-    notes?: string;
-  }): Promise<WasteRecord> {
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
-      throw new Error('User not authenticated');
-    }
+  // Add record (alias for insertRecord)
+  async addRecord(record: DailyRecyclingInput): Promise<WasteRecord> {
+    return this.insertRecord(record);
+  },
 
-    // Calculate new total if paper, plastic, or metal is updated
-    let total = undefined;
-    if (updates.paper !== undefined || updates.plastic !== undefined || updates.metal !== undefined) {
-      const currentRecord = await this.getRecordById(id);
-      const paper = updates.paper !== undefined ? updates.paper : currentRecord.paper;
-      const plastic = updates.plastic !== undefined ? updates.plastic : currentRecord.plastic;
-      const metal = updates.metal !== undefined ? updates.metal : currentRecord.metal;
-      total = paper + plastic + metal;
-    }
+  // Update record
+  async updateRecord(id: number, updates: Partial<DailyRecyclingInput>): Promise<WasteRecord> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    // Get current record to calculate total
+    const { data: current, error: fetchError } = await supabase
+      .from('waste_records')
+      .select('*')
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .single();
+
+    if (fetchError) throw new Error(fetchError.message);
+
+    const paper = updates.paper !== undefined ? updates.paper : current.paper;
+    const plastic = updates.plastic !== undefined ? updates.plastic : current.plastic;
+    const metal = updates.metal !== undefined ? updates.metal : current.metal;
+    const total = paper + plastic + metal;
 
     const { data, error } = await supabase
       .from('waste_records')
@@ -134,21 +126,14 @@ export const recyclingService = {
       .select()
       .single();
 
-    if (error) {
-      console.error('Error updating record:', error);
-      throw new Error(error.message);
-    }
-
+    if (error) throw new Error(error.message);
     return data;
   },
 
   // Delete record
   async deleteRecord(id: number): Promise<void> {
     const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
-      throw new Error('User not authenticated');
-    }
+    if (!user) throw new Error('User not authenticated');
 
     const { error } = await supabase
       .from('waste_records')
@@ -156,32 +141,98 @@ export const recyclingService = {
       .eq('id', id)
       .eq('user_id', user.id);
 
-    if (error) {
-      console.error('Error deleting record:', error);
-      throw new Error(error.message);
+    if (error) throw new Error(error.message);
+  },
+
+  // Upsert record (insert or update)
+  async upsertRecord(record: DailyRecyclingInput): Promise<WasteRecord> {
+    const existing = await this.getRecordByDate(record.date);
+    if (existing) {
+      return this.updateRecord(existing.id, record);
+    } else {
+      return this.insertRecord(record);
     }
   },
 
-  // Get single record by ID
-  async getRecordById(id: number): Promise<WasteRecord> {
-    const { data: { user } } = await supabase.auth.getUser();
+  // Get today's record
+  async getTodayRecord(): Promise<WasteRecord | null> {
+    const today = new Date().toISOString().split('T')[0];
+    return this.getRecordByDate(today);
+  },
+
+  // Get summary statistics
+  async getSummaryStats(days: number = 7): Promise<{
+    totalPaper: number;
+    totalPlastic: number;
+    totalMetal: number;
+    grandTotal: number;
+    recordCount: number;
+    averagePerDay: number;
+  }> {
+    const records = await this.getAllRecords();
     
-    if (!user) {
-      throw new Error('User not authenticated');
-    }
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - days);
+    const cutoffStr = cutoffDate.toISOString().split('T')[0];
+    
+    const filtered = records.filter(r => r.date >= cutoffStr);
+    
+    const totalPaper = filtered.reduce((sum, r) => sum + (r.paper || 0), 0);
+    const totalPlastic = filtered.reduce((sum, r) => sum + (r.plastic || 0), 0);
+    const totalMetal = filtered.reduce((sum, r) => sum + (r.metal || 0), 0);
+    const grandTotal = totalPaper + totalPlastic + totalMetal;
+    
+    return {
+      totalPaper,
+      totalPlastic,
+      totalMetal,
+      grandTotal,
+      recordCount: filtered.length,
+      averagePerDay: filtered.length > 0 ? grandTotal / filtered.length : 0
+    };
+  },
 
-    const { data, error } = await supabase
-      .from('waste_records')
-      .select('*')
-      .eq('id', id)
-      .eq('user_id', user.id)
-      .single();
+  // Subscribe to real-time changes
+  subscribeToChanges(callback: (payload: any) => void) {
+    let userId: string | null = null;
+    
+    // First, get the current user
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        userId = user.id;
+      }
+    });
+    
+    const channel = supabase
+      .channel('waste_records_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'waste_records',
+        },
+        async (payload) => {
+          // Only process events for the current user
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user && (!userId || userId === user.id)) {
+            userId = user.id;
+            
+            // Transform payload to match expected format
+            const transformedPayload = {
+              eventType: payload.eventType.toUpperCase(),
+              new: payload.new,
+              old: payload.old
+            };
+            callback(transformedPayload);
+          }
+        }
+      )
+      .subscribe();
 
-    if (error) {
-      console.error('Error fetching record:', error);
-      throw new Error(error.message);
-    }
-
-    return data;
+    // Return unsubscribe function
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }
 };
