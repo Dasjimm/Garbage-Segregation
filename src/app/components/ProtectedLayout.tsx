@@ -116,7 +116,7 @@ export default function ProtectedLayout({ children, activeMenu }: ProtectedLayou
           </div>
         </main>
         
-        {/* QR Code - Bottom Right Corner */}
+        {/* QR Code - Bottom Right Corner (only visible when NOT logged in) */}
         <div className="fixed bottom-4 right-4 z-50 bg-white rounded-xl shadow-lg p-2 border border-gray-200">
           <div className="flex flex-col items-center gap-1">
             {qrCodeUrl && (
@@ -145,7 +145,8 @@ export default function ProtectedLayout({ children, activeMenu }: ProtectedLayou
         </div>
       </main>
       
-      {/* QR Code - Bottom Right Corner (when logged in as well) */}
+      {/* QR Code - REMOVED when logged in (commented out) */}
+      {/* 
       <div className="fixed bottom-4 right-4 z-50 bg-white rounded-xl shadow-lg p-2 border border-gray-200">
         <div className="flex flex-col items-center gap-1">
           {qrCodeUrl && (
@@ -160,6 +161,7 @@ export default function ProtectedLayout({ children, activeMenu }: ProtectedLayou
           <p className="text-[8px] text-gray-500 text-center max-w-[80px]">Scan to visit EcoWaste</p>
         </div>
       </div>
+      */}
     </div>
   );
 }
