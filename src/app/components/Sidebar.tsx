@@ -149,8 +149,8 @@ export default function Sidebar({ activeMenu }: SidebarProps) {
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 relative flex-shrink-0 bg-gradient-to-br from-teal-50 to-teal-100 rounded-xl overflow-hidden">
                 <Image
-                  src="/banicainlogo.jpg"
-                  alt="Banicain Logo"
+                  src="/wastelogo.png"
+                  alt="EcoWaste Logo"
                   width={48}
                   height={48}
                   className="object-cover w-full h-full"
@@ -158,7 +158,7 @@ export default function Sidebar({ activeMenu }: SidebarProps) {
                 />
               </div>
               <div className="flex-1">
-                <h1 className="text-xl font-bold text-teal-600 leading-tight">Barangay Banicain</h1>
+                <h1 className="text-xl font-bold text-teal-600 leading-tight">EcoWaste</h1>
                 <p className="text-xs text-gray-500 leading-tight">Recycling Program</p>
               </div>
             </div>
@@ -219,8 +219,8 @@ export default function Sidebar({ activeMenu }: SidebarProps) {
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 relative flex-shrink-0 bg-gradient-to-br from-teal-50 to-teal-100 rounded-xl overflow-hidden">
                     <Image
-                      src="/banicainlogo.jpg"
-                      alt="Banicain Logo"
+                      src="/wastelogo.png"
+                      alt="EcoWaste Logo"
                       width={48}
                       height={48}
                       className="object-cover w-full h-full"
@@ -228,7 +228,7 @@ export default function Sidebar({ activeMenu }: SidebarProps) {
                     />
                   </div>
                   <div className="flex-1">
-                    <h1 className="text-xl font-bold text-teal-600 leading-tight">Barangay Banicain</h1>
+                    <h1 className="text-xl font-bold text-teal-600 leading-tight">EcoWaste</h1>
                     <p className="text-xs text-gray-500 leading-tight">Recycling Program</p>
                   </div>
                 </div>
@@ -287,8 +287,8 @@ export default function Sidebar({ activeMenu }: SidebarProps) {
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 relative flex-shrink-0 bg-gradient-to-br from-teal-50 to-teal-100 rounded-xl overflow-hidden">
             <Image
-              src="/banicainlogo.jpg"
-              alt="Banicain Logo"
+              src="/wastelogo.png"
+              alt="EcoWaste Logo"
               width={48}
               height={48}
               className="object-cover w-full h-full"
@@ -296,7 +296,7 @@ export default function Sidebar({ activeMenu }: SidebarProps) {
             />
           </div>
           <div className="flex-1">
-            <h1 className="text-xl font-bold text-teal-600 leading-tight">Barangay Banicain</h1>
+            <h1 className="text-xl font-bold text-teal-600 leading-tight">EcoWaste</h1>
             <p className="text-xs text-gray-500 leading-tight">Recycling Management</p>
           </div>
         </div>

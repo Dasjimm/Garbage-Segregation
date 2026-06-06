@@ -1,7 +1,7 @@
 'use client';
 
 import { RecordModal } from '@/app/components/RecordModal';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import ProtectedLayout from '@/app/components/ProtectedLayout';
 import { useRecyclingData } from '@/app/context/RecyclingDataContext';
 import { useConfirmation } from '@/app/context/ConfirmationContext';
@@ -363,6 +363,75 @@ export default function ReportsPage() {
       return true;
     });
 
+  // Function to filter records based on report type and date range
+  const getFilteredRecordsForExport = () => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    let startDate: Date;
+    let endDate: Date = today;
+    
+    switch (reportType) {
+      case 'daily':
+        // Daily: Show today's records
+        startDate = today;
+        break;
+      case 'weekly':
+        // Weekly: Show last 7 days
+        startDate = new Date(today);
+        startDate.setDate(today.getDate() - 7);
+        break;
+      case 'monthly':
+        // Monthly: Show last 30 days
+        startDate = new Date(today);
+        startDate.setDate(today.getDate() - 30);
+        break;
+      default:
+        startDate = new Date(today);
+        startDate.setDate(today.getDate() - 7);
+    }
+    
+    return sortedRecords.filter(record => {
+      const recordDate = new Date(record.date);
+      return recordDate >= startDate && recordDate <= endDate;
+    });
+  };
+
+  // Get records based on selected date range
+  const getFilteredRecordsByDateRange = () => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    let startDate: Date;
+    let endDate: Date = today;
+    
+    switch (dateRange) {
+      case 'today':
+        startDate = today;
+        break;
+      case 'last7days':
+        startDate = new Date(today);
+        startDate.setDate(today.getDate() - 7);
+        break;
+      case 'last30days':
+        startDate = new Date(today);
+        startDate.setDate(today.getDate() - 30);
+        break;
+      case 'last90days':
+        startDate = new Date(today);
+        startDate.setDate(today.getDate() - 90);
+        break;
+      default:
+        startDate = new Date(today);
+        startDate.setDate(today.getDate() - 7);
+    }
+    
+    return sortedRecords.filter(record => {
+      const recordDate = new Date(record.date);
+      return recordDate >= startDate && recordDate <= endDate;
+    });
+  };
+
   const handleSort = (field: string) => {
     if (sortField === field) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -700,11 +769,65 @@ export default function ReportsPage() {
     });
   };
 
-  // Professional PDF Export for Reports & Analytics
+  // Professional PDF Export with Daily, Weekly, Monthly filtering
   const exportToPDF = async () => {
     setIsExporting(true);
     
     try {
+      // Get filtered records based on report type
+      let filteredRecords: any[] = [];
+      let periodLabel = '';
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      
+      switch (reportType) {
+        case 'daily':
+          filteredRecords = sortedRecords.filter(record => {
+            const recordDate = new Date(record.date);
+            return recordDate.toDateString() === today.toDateString();
+          });
+          periodLabel = 'Daily Report';
+          break;
+        case 'weekly':
+          const weekStart = new Date(today);
+          weekStart.setDate(today.getDate() - 7);
+          filteredRecords = sortedRecords.filter(record => {
+            const recordDate = new Date(record.date);
+            return recordDate >= weekStart && recordDate <= today;
+          });
+          periodLabel = 'Weekly Report (Last 7 Days)';
+          break;
+        case 'monthly':
+          const monthStart = new Date(today);
+          monthStart.setDate(today.getDate() - 30);
+          filteredRecords = sortedRecords.filter(record => {
+            const recordDate = new Date(record.date);
+            return recordDate >= monthStart && recordDate <= today;
+          });
+          periodLabel = 'Monthly Report (Last 30 Days)';
+          break;
+        default:
+          filteredRecords = sortedRecords;
+          periodLabel = 'All Records Report';
+      }
+      
+      // Sort filtered records by date (newest first)
+      filteredRecords = [...filteredRecords].sort((a, b) => 
+        new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+      
+      // Calculate totals for filtered records
+      const filteredTotalPaper = filteredRecords.reduce((sum, r) => sum + (r.paper || 0), 0);
+      const filteredTotalPlastic = filteredRecords.reduce((sum, r) => sum + (r.plastic || 0), 0);
+      const filteredTotalMetal = filteredRecords.reduce((sum, r) => sum + (r.metal || 0), 0);
+      const filteredGrandTotal = filteredTotalPaper + filteredTotalPlastic + filteredTotalMetal;
+      
+      const filteredPaperPercentage = ((filteredTotalPaper / filteredGrandTotal) * 100 || 0).toFixed(1);
+      const filteredPlasticPercentage = ((filteredTotalPlastic / filteredGrandTotal) * 100 || 0).toFixed(1);
+      const filteredMetalPercentage = ((filteredTotalMetal / filteredGrandTotal) * 100 || 0).toFixed(1);
+      
+      const filteredAvgPerDay = filteredRecords.length > 0 ? filteredGrandTotal / filteredRecords.length : 0;
+      
       const element = document.createElement('div');
       element.style.padding = '30px';
       element.style.fontFamily = "'Segoe UI', 'Inter', Arial, sans-serif";
@@ -728,20 +851,6 @@ export default function ReportsPage() {
         console.warn('Could not load logo:', err);
       }
       
-      // Calculate analytics data
-      const paperPercentage = ((totalPaper / grandTotal) * 100 || 0).toFixed(1);
-      const plasticPercentage = ((totalPlastic / grandTotal) * 100 || 0).toFixed(1);
-      const metalPercentage = ((totalMetal / grandTotal) * 100 || 0).toFixed(1);
-      
-      // Get top 10 records by total weight
-      const topRecords = [...sortedRecords]
-        .sort((a, b) => {
-          const totalA = (a.paper || 0) + (a.plastic || 0) + (a.metal || 0);
-          const totalB = (b.paper || 0) + (b.plastic || 0) + (b.metal || 0);
-          return totalB - totalA;
-        })
-        .slice(0, 10);
-      
       element.innerHTML = `
         <div style="margin-bottom: 30px;">
           <!-- Header with Logo -->
@@ -751,65 +860,56 @@ export default function ReportsPage() {
                 ${logoBase64 ? `<img src="${logoBase64}" style="width: 100%; height: 100%; object-fit: cover;" />` : `
                   <svg width="50" height="50" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <rect width="100" height="100" rx="14" fill="#1a5c3e"/>
-                    <text x="50" y="28" text-anchor="middle" fill="white" font-size="12" font-weight="bold" font-family="Arial, sans-serif">BAN</text>
-                    <text x="50" y="42" text-anchor="middle" fill="#4ade80" font-size="8" font-family="Arial, sans-serif">PAPER</text>
-                    <text x="50" y="53" text-anchor="middle" fill="#fbbf24" font-size="8" font-family="Arial, sans-serif">PLASTIC</text>
-                    <text x="50" y="64" text-anchor="middle" fill="#c084fc" font-size="8" font-family="Arial, sans-serif">METAL</text>
-                    <text x="50" y="76" text-anchor="middle" fill="white" font-size="7" font-family="Arial, sans-serif">WASTE</text>
-                    <text x="50" y="87" text-anchor="middle" fill="#4ade80" font-size="6" font-family="Arial, sans-serif">SEGREGATION</text>
+                    <text x="50" y="28" text-anchor="middle" fill="white" font-size="12" font-weight="bold" font-family="Arial, sans-serif">EW</text>
+                    <text x="50" y="42" text-anchor="middle" fill="#4ade80" font-size="8" font-family="Arial, sans-serif">ECO</text>
+                    <text x="50" y="53" text-anchor="middle" fill="#fbbf24" font-size="8" font-family="Arial, sans-serif">WASTE</text>
                   </svg>
                 `}
               </div>
               <div>
                 <h1 style="color: #0f172a; font-size: 24px; font-weight: 700; margin: 0;">EcoWaste</h1>
-                <p style="color: #0d9488; font-size: 12px; margin: 2px 0 0 0; font-weight: 500;">Reports & Analytics</p>
+                <p style="color: #0d9488; font-size: 12px; margin: 2px 0 0 0; font-weight: 500;">Recycling Management System</p>
               </div>
             </div>
             <div style="text-align: right;">
-              <p style="color: #64748b; font-size: 11px; margin: 0;">ANALYTICS REPORT</p>
+              <p style="color: #64748b; font-size: 11px; margin: 0;">${periodLabel.toUpperCase()}</p>
               <p style="color: #94a3b8; font-size: 10px; margin: 4px 0 0 0;">Generated: ${new Date().toLocaleString()}</p>
             </div>
           </div>
           
           <!-- Report Title -->
           <div style="text-align: center; margin-bottom: 30px;">
-            <h2 style="color: #1e293b; font-size: 22px; margin: 0 0 8px 0;">Waste Management Analytics Report</h2>
-            <p style="color: #64748b; font-size: 13px; margin: 0;">Comprehensive recycling data analysis, trends, and performance metrics</p>
+            <h2 style="color: #1e293b; font-size: 22px; margin: 0 0 8px 0;">${periodLabel}</h2>
+            <p style="color: #64748b; font-size: 13px; margin: 0;">${filteredRecords.length} records found | Total: ${filteredGrandTotal.toFixed(1)} kg</p>
           </div>
           
           <!-- Key Metrics Dashboard -->
           <div style="margin-bottom: 35px;">
             <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 15px; color: #1e293b; border-left: 4px solid #0d9488; padding-left: 12px;">📊 Key Performance Indicators</h3>
-            <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px;">
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
               <div style="background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); padding: 15px; border-radius: 12px; text-align: center;">
                 <div style="font-size: 24px; margin-bottom: 6px;">📄</div>
                 <div style="font-size: 11px; color: #1e40af; font-weight: 600;">Paper Total</div>
-                <div style="font-size: 20px; font-weight: 800; color: #1e3a8a;">${totalPaper.toFixed(1)} kg</div>
-                <div style="font-size: 10px; color: #3b82f6;">${paperPercentage}% of total</div>
+                <div style="font-size: 20px; font-weight: 800; color: #1e3a8a;">${filteredTotalPaper.toFixed(1)} kg</div>
+                <div style="font-size: 10px; color: #3b82f6;">${filteredPaperPercentage}% of total</div>
               </div>
               <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 15px; border-radius: 12px; text-align: center;">
                 <div style="font-size: 24px; margin-bottom: 6px;">🧴</div>
                 <div style="font-size: 11px; color: #92400e; font-weight: 600;">Plastic Total</div>
-                <div style="font-size: 20px; font-weight: 800; color: #b45309;">${totalPlastic.toFixed(1)} kg</div>
-                <div style="font-size: 10px; color: #eab308;">${plasticPercentage}% of total</div>
+                <div style="font-size: 20px; font-weight: 800; color: #b45309;">${filteredTotalPlastic.toFixed(1)} kg</div>
+                <div style="font-size: 10px; color: #eab308;">${filteredPlasticPercentage}% of total</div>
               </div>
               <div style="background: linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%); padding: 15px; border-radius: 12px; text-align: center;">
                 <div style="font-size: 24px; margin-bottom: 6px;">🔩</div>
                 <div style="font-size: 11px; color: #6b21a5; font-weight: 600;">Metal Total</div>
-                <div style="font-size: 20px; font-weight: 800; color: #7e22ce;">${totalMetal.toFixed(1)} kg</div>
-                <div style="font-size: 10px; color: #a855f7;">${metalPercentage}% of total</div>
+                <div style="font-size: 20px; font-weight: 800; color: #7e22ce;">${filteredTotalMetal.toFixed(1)} kg</div>
+                <div style="font-size: 10px; color: #a855f7;">${filteredMetalPercentage}% of total</div>
               </div>
               <div style="background: linear-gradient(135deg, #ccfbf1 0%, #99f6e4 100%); padding: 15px; border-radius: 12px; text-align: center;">
                 <div style="font-size: 24px; margin-bottom: 6px;">♻️</div>
-                <div style="font-size: 11px; color: #0f766e; font-weight: 600;">Grand Total</div>
-                <div style="font-size: 20px; font-weight: 800; color: #0d9488;">${grandTotal.toFixed(1)} kg</div>
-                <div style="font-size: 10px; color: #14b8a6;">All materials</div>
-              </div>
-              <div style="background: linear-gradient(135deg, #fce7f3 0%, #fbcfe8 100%); padding: 15px; border-radius: 12px; text-align: center;">
-                <div style="font-size: 24px; margin-bottom: 6px;">📅</div>
-                <div style="font-size: 11px; color: #be185d; font-weight: 600;">Daily Average</div>
-                <div style="font-size: 20px; font-weight: 800; color: #db2777;">${averagePerDay.toFixed(1)} kg</div>
-                <div style="font-size: 10px; color: #ec4899;">Over ${wasteRecords.length} days</div>
+                <div style="font-size: 11px; color: #0f766e; font-weight: 600;">Daily Average</div>
+                <div style="font-size: 20px; font-weight: 800; color: #0d9488;">${filteredAvgPerDay.toFixed(1)} kg</div>
+                <div style="font-size: 10px; color: #14b8a6;">Over ${filteredRecords.length} days</div>
               </div>
             </div>
           </div>
@@ -824,33 +924,28 @@ export default function ReportsPage() {
                     <tr style="background-color: #f1f5f9; border-bottom: 2px solid #cbd5e1;">
                       <th style="padding: 10px; text-align: left;">Material</th>
                       <th style="padding: 10px; text-align: right;">Total (kg)</th>
-                      <th style="padding: 10px; text-align: right;">Daily Avg (kg)</th>
                       <th style="padding: 10px; text-align: right;">Share</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr style="border-bottom: 1px solid #e2e8f0;">
                       <td style="padding: 8px;">📄 Paper</td>
-                      <td style="padding: 8px; text-align: right;">${totalPaper.toFixed(1)}</td>
-                      <td style="padding: 8px; text-align: right;">${averagePaper.toFixed(1)}</td>
-                      <td style="padding: 8px; text-align: right; font-weight: 600; color: #3b82f6;">${paperPercentage}%</td>
+                      <td style="padding: 8px; text-align: right;">${filteredTotalPaper.toFixed(1)}</td>
+                      <td style="padding: 8px; text-align: right; font-weight: 600; color: #3b82f6;">${filteredPaperPercentage}%</td>
                     </tr>
                     <tr style="border-bottom: 1px solid #e2e8f0; background-color: #fafafa;">
                       <td style="padding: 8px;">🧴 Plastic</td>
-                      <td style="padding: 8px; text-align: right;">${totalPlastic.toFixed(1)}</td>
-                      <td style="padding: 8px; text-align: right;">${averagePlastic.toFixed(1)}</td>
-                      <td style="padding: 8px; text-align: right; font-weight: 600; color: #eab308;">${plasticPercentage}%</td>
+                      <td style="padding: 8px; text-align: right;">${filteredTotalPlastic.toFixed(1)}</td>
+                      <td style="padding: 8px; text-align: right; font-weight: 600; color: #eab308;">${filteredPlasticPercentage}%</td>
                     </tr>
                     <tr style="border-bottom: 1px solid #e2e8f0;">
                       <td style="padding: 8px;">🔩 Metal</td>
-                      <td style="padding: 8px; text-align: right;">${totalMetal.toFixed(1)}</td>
-                      <td style="padding: 8px; text-align: right;">${averageMetal.toFixed(1)}</td>
-                      <td style="padding: 8px; text-align: right; font-weight: 600; color: #a855f7;">${metalPercentage}%</td>
+                      <td style="padding: 8px; text-align: right;">${filteredTotalMetal.toFixed(1)}</td>
+                      <td style="padding: 8px; text-align: right; font-weight: 600; color: #a855f7;">${filteredMetalPercentage}%</td>
                     </tr>
                     <tr style="background-color: #f0fdf4; border-top: 2px solid #dcfce7;">
                       <td style="padding: 8px; font-weight: 700;">♻️ Total</td>
-                      <td style="padding: 8px; text-align: right; font-weight: 700;">${grandTotal.toFixed(1)} kg</td>
-                      <td style="padding: 8px; text-align: right; font-weight: 700;">${averagePerDay.toFixed(1)} kg</td>
+                      <td style="padding: 8px; text-align: right; font-weight: 700;">${filteredGrandTotal.toFixed(1)} kg</td>
                       <td style="padding: 8px; text-align: right; font-weight: 700;">100%</td>
                     </tr>
                   </tbody>
@@ -860,79 +955,37 @@ export default function ReportsPage() {
                 <div style="margin-bottom: 15px;">
                   <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 12px;">
                     <span>📄 Paper</span>
-                    <span style="font-weight: 600;">${paperPercentage}%</span>
+                    <span style="font-weight: 600;">${filteredPaperPercentage}%</span>
                   </div>
                   <div style="background-color: #e2e8f0; border-radius: 8px; height: 20px; overflow: hidden;">
-                    <div style="background-color: #3b82f6; width: ${paperPercentage}%; height: 20px; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; color: white; font-size: 10px; font-weight: 500;">
-                      ${parseFloat(paperPercentage) > 10 ? `${paperPercentage}%` : ''}
-                    </div>
+                    <div style="background-color: #3b82f6; width: ${filteredPaperPercentage}%; height: 20px;"></div>
                   </div>
                 </div>
                 <div style="margin-bottom: 15px;">
                   <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 12px;">
                     <span>🧴 Plastic</span>
-                    <span style="font-weight: 600;">${plasticPercentage}%</span>
+                    <span style="font-weight: 600;">${filteredPlasticPercentage}%</span>
                   </div>
                   <div style="background-color: #e2e8f0; border-radius: 8px; height: 20px; overflow: hidden;">
-                    <div style="background-color: #eab308; width: ${plasticPercentage}%; height: 20px; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; color: white; font-size: 10px; font-weight: 500;">
-                      ${parseFloat(plasticPercentage) > 10 ? `${plasticPercentage}%` : ''}
-                    </div>
+                    <div style="background-color: #eab308; width: ${filteredPlasticPercentage}%; height: 20px;"></div>
                   </div>
                 </div>
                 <div style="margin-bottom: 15px;">
                   <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 12px;">
                     <span>🔩 Metal</span>
-                    <span style="font-weight: 600;">${metalPercentage}%</span>
+                    <span style="font-weight: 600;">${filteredMetalPercentage}%</span>
                   </div>
                   <div style="background-color: #e2e8f0; border-radius: 8px; height: 20px; overflow: hidden;">
-                    <div style="background-color: #a855f7; width: ${metalPercentage}%; height: 20px; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; color: white; font-size: 10px; font-weight: 500;">
-                      ${parseFloat(metalPercentage) > 10 ? `${metalPercentage}%` : ''}
-                    </div>
+                    <div style="background-color: #a855f7; width: ${filteredMetalPercentage}%; height: 20px;"></div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
           
-          <!-- Top Records Analytics -->
+          <!-- Detailed Records -->
           <div style="margin-bottom: 30px;">
-            <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 15px; color: #1e293b; border-left: 4px solid #0d9488; padding-left: 12px;">🏆 Top 10 Records by Volume</h3>
-            <div style="overflow-x: auto;">
-              <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
-                <thead>
-                  <tr style="background-color: #f1f5f9; border-bottom: 2px solid #cbd5e1;">
-                    <th style="padding: 10px; text-align: left;">Rank</th>
-                    <th style="padding: 10px; text-align: left;">Date</th>
-                    <th style="padding: 10px; text-align: right;">Paper (kg)</th>
-                    <th style="padding: 10px; text-align: right;">Plastic (kg)</th>
-                    <th style="padding: 10px; text-align: right;">Metal (kg)</th>
-                    <th style="padding: 10px; text-align: right;">Total (kg)</th>
-                    <th style="padding: 10px; text-align: left;">Notes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${topRecords.map((record, index) => {
-                    const total = (record.paper || 0) + (record.plastic || 0) + (record.metal || 0);
-                    return `
-                      <tr style="border-bottom: 1px solid #e2e8f0;">
-                        <td style="padding: 8px; font-weight: 600; color: ${index < 3 ? '#0d9488' : '#64748b'};">${index + 1}${index < 3 ? ' 🏆' : ''}</td>
-                        <td style="padding: 8px;">${record.date}</td>
-                        <td style="padding: 8px; text-align: right; font-weight: 500; color: #3b82f6;">${(record.paper || 0).toFixed(1)}</td>
-                        <td style="padding: 8px; text-align: right; font-weight: 500; color: #eab308;">${(record.plastic || 0).toFixed(1)}</td>
-                        <td style="padding: 8px; text-align: right; font-weight: 500; color: #a855f7;">${(record.metal || 0).toFixed(1)}</td>
-                        <td style="padding: 8px; text-align: right; font-weight: 600;">${total.toFixed(1)}</td>
-                        <td style="padding: 8px; color: #64748b;">${record.notes || '-'}</td>
-                      </tr>
-                    `;
-                  }).join('')}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          
-          <!-- Recent Activity -->
-          <div style="margin-bottom: 30px;">
-            <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 15px; color: #1e293b; border-left: 4px solid #0d9488; padding-left: 12px;">📋 Recent Recycling Activity</h3>
+            <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 15px; color: #1e293b; border-left: 4px solid #0d9488; padding-left: 12px;">📋 Detailed Records (${filteredRecords.length})</h3>
             <div style="overflow-x: auto;">
               <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
                 <thead>
@@ -946,7 +999,7 @@ export default function ReportsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  ${sortedRecords.slice(0, 15).map(record => {
+                  ${filteredRecords.map(record => {
                     const total = (record.paper || 0) + (record.plastic || 0) + (record.metal || 0);
                     return `
                       <tr style="border-bottom: 1px solid #e2e8f0;">
@@ -961,13 +1014,13 @@ export default function ReportsPage() {
                   }).join('')}
                 </tbody>
               </table>
-              ${sortedRecords.length > 15 ? `<p style="text-align: center; font-size: 11px; color: #64748b; margin-top: 12px;">* Showing latest 15 of ${sortedRecords.length} records</p>` : ''}
+              ${filteredRecords.length === 0 ? '<p style="text-align: center; font-size: 12px; color: #64748b; margin-top: 20px;">No records found for the selected period.</p>' : ''}
             </div>
           </div>
           
           <!-- Footer with Copyright and Page Number -->
           <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: #94a3b8;">
-            <div>© ${new Date().getFullYear()} EcoWaste Recycling Management System. All rights reserved. | Analytics Report</div>
+            <div>© ${new Date().getFullYear()} EcoWaste Recycling Management System. All rights reserved.</div>
             <div style="font-family: monospace;">PAGE 1 OF 1</div>
           </div>
         </div>
@@ -1015,12 +1068,12 @@ export default function ReportsPage() {
         pdf.text(`© ${new Date().getFullYear()} EcoWaste Recycling Management System`, 15, pdf.internal.pageSize.getHeight() - 10);
       }
       
-      pdf.save(`EcoWaste_Analytics_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+      pdf.save(`EcoWaste_${reportType.toUpperCase()}_Report_${new Date().toISOString().split('T')[0]}.pdf`);
       
       document.body.removeChild(element);
       
       showNotification({
-        message: 'Analytics Report exported successfully!',
+        message: `${reportType.toUpperCase()} Report exported successfully!`,
         type: 'success',
         duration: 3000
       });
@@ -1047,6 +1100,41 @@ export default function ReportsPage() {
             </div>
           )}
         </div>
+        
+        {/* Report Type Selector */}
+        <div className="grid grid-cols-3 gap-2">
+          <button
+            onClick={() => setReportType('daily')}
+            className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+              reportType === 'daily'
+                ? 'bg-teal-600 text-white shadow-md'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            Daily
+          </button>
+          <button
+            onClick={() => setReportType('weekly')}
+            className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+              reportType === 'weekly'
+                ? 'bg-teal-600 text-white shadow-md'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            Weekly
+          </button>
+          <button
+            onClick={() => setReportType('monthly')}
+            className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+              reportType === 'monthly'
+                ? 'bg-teal-600 text-white shadow-md'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            Monthly
+          </button>
+        </div>
+        
         <div className="flex gap-2">
           <button
             onClick={exportToPDF}
@@ -1124,47 +1212,46 @@ export default function ReportsPage() {
 
       <div className="space-y-2 mb-4">
         <h3 className="text-sm font-semibold mb-2">Recent Records</h3>
-        {sortedRecords.length > 0 ? (
-          sortedRecords.slice(0, 5).map((row) => {
-            const total = (row.paper || 0) + (row.plastic || 0) + (row.metal || 0);
-            return (
-              <div key={row.id} className="bg-white rounded-lg shadow-sm p-3 border-l-2 border-teal-500">
-                <div className="flex justify-between items-start mb-2">
-                  <span className="text-xs font-medium text-gray-900">{row.date}</span>
-                  <div className="flex gap-2">
-                    <button onClick={() => openEditModal(row)} className="text-blue-600">
-                      <Edit size={12} />
-                    </button>
-                    <button onClick={() => handleDelete(row.id)} className="text-red-600">
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
+        {sortedRecords.slice(0, 5).map((row) => {
+          const total = (row.paper || 0) + (row.plastic || 0) + (row.metal || 0);
+          return (
+            <div key={row.id} className="bg-white rounded-lg shadow-sm p-3 border-l-2 border-teal-500">
+              <div className="flex justify-between items-start mb-2">
+                <span className="text-xs font-medium text-gray-900">{row.date}</span>
+                <div className="flex gap-2">
+                  <button onClick={() => openEditModal(row)} className="text-blue-600">
+                    <Edit size={12} />
+                  </button>
+                  <button onClick={() => handleDelete(row.id)} className="text-red-600">
+                    <Trash2 size={12} />
+                  </button>
                 </div>
-                <div className="grid grid-cols-4 gap-1 text-[10px]">
-                  <div>
-                    <span className="text-gray-500">Paper</span>
-                    <p className="font-medium text-blue-600">{(row.paper || 0).toFixed(1)}</p>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Plastic</span>
-                    <p className="font-medium text-yellow-600">{(row.plastic || 0).toFixed(1)}</p>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Metal</span>
-                    <p className="font-medium text-purple-600">{(row.metal || 0).toFixed(1)}</p>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Total</span>
-                    <p className="font-medium text-gray-900">{total.toFixed(1)}</p>
-                  </div>
-                </div>
-                {row.notes && (
-                  <p className="text-[8px] text-gray-500 mt-2 truncate">{row.notes}</p>
-                )}
               </div>
-            );
-          })
-        ) : (
+              <div className="grid grid-cols-4 gap-1 text-[10px]">
+                <div>
+                  <span className="text-gray-500">Paper</span>
+                  <p className="font-medium text-blue-600">{(row.paper || 0).toFixed(1)}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500">Plastic</span>
+                  <p className="font-medium text-yellow-600">{(row.plastic || 0).toFixed(1)}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500">Metal</span>
+                  <p className="font-medium text-purple-600">{(row.metal || 0).toFixed(1)}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500">Total</span>
+                  <p className="font-medium text-gray-900">{total.toFixed(1)}</p>
+                </div>
+              </div>
+              {row.notes && (
+                <p className="text-[8px] text-gray-500 mt-2 truncate">{row.notes}</p>
+              )}
+            </div>
+          );
+        })}
+        {sortedRecords.length === 0 && (
           <p className="text-center text-gray-500 py-4 text-xs">No records found</p>
         )}
       </div>
@@ -1206,7 +1293,41 @@ export default function ReportsPage() {
 
   const DesktopView = () => (
     <div className="w-full px-2 sm:px-3 md:px-4 lg:px-5 xl:px-6 py-3 sm:py-4 md:py-5 lg:py-6 animate-fade-in">
-      <div className="flex flex-col sm:flex-row justify-end items-end gap-3 mb-4 sm:mb-5 md:mb-6">
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-3 mb-4 sm:mb-5 md:mb-6">
+        {/* Report Type Selector */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => setReportType('daily')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              reportType === 'daily'
+                ? 'bg-teal-600 text-white shadow-md'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            Daily Report
+          </button>
+          <button
+            onClick={() => setReportType('weekly')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              reportType === 'weekly'
+                ? 'bg-teal-600 text-white shadow-md'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            Weekly Report
+          </button>
+          <button
+            onClick={() => setReportType('monthly')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              reportType === 'monthly'
+                ? 'bg-teal-600 text-white shadow-md'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            Monthly Report
+          </button>
+        </div>
+        
         <div className="flex gap-2 w-full sm:w-auto">
           <button
             onClick={() => setIsHistoryModalOpen(true)}
@@ -1228,7 +1349,7 @@ export default function ReportsPage() {
             ) : (
               <>
                 <Download size={16} />
-                <span>Export Analytics Report</span>
+                <span>Export Report</span>
               </>
             )}
           </button>

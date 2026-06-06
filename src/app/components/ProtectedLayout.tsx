@@ -2,7 +2,7 @@
 
 import { useSupabaseAuth } from '@/app/context/SupabaseAuthContext';
 import { useRouter, usePathname } from 'next/navigation';
-import { Lock } from 'lucide-react';
+import Image from 'next/image';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import { useEffect, useState } from 'react';
@@ -18,6 +18,7 @@ export default function ProtectedLayout({ children, activeMenu }: ProtectedLayou
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
 
   useEffect(() => {
     setMounted(true);
@@ -31,8 +32,13 @@ export default function ProtectedLayout({ children, activeMenu }: ProtectedLayou
     return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
+  // Generate QR code using QR Code API
+  useEffect(() => {
+    const websiteUrl = 'https://garbage-segregation-two.vercel.app';
+    // Using a free QR code API
+    setQrCodeUrl(`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(websiteUrl)}`);
+  }, []);
 
-  
   const getMainMargin = () => {
     if (isMobile) return 'ml-0'; 
     return 'ml-64'; 
@@ -68,21 +74,63 @@ export default function ProtectedLayout({ children, activeMenu }: ProtectedLayou
             
             <div className="absolute inset-0 flex items-center justify-center p-4">
               <div className="text-center bg-white p-6 sm:p-8 md:p-10 lg:p-12 rounded-xl sm:rounded-2xl shadow-2xl max-w-[90%] sm:max-w-md mx-auto border border-gray-100">
-                <div className="mb-6 sm:mb-8 flex justify-center">
-                  <div className="bg-teal-50 p-4 sm:p-5 md:p-6 rounded-full">
-                    <Lock size={40} className="sm:w-16 sm:h-16 md:w-20 md:h-20 text-teal-600" />
+                {/* EcoWaste Title */}
+                <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-teal-600 mb-6">EcoWaste</h1>
+                
+                {/* Logos Section */}
+                <div className="flex items-center justify-center gap-4 mb-6">
+                  {/* Web Logo */}
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 relative">
+                    <Image
+                      src="/wastelogo.png"
+                      alt="EcoWaste Logo"
+                      width={100}
+                      height={100}
+                      className="object-cover w-full h-full rounded-full"
+                    />
+                  </div>
+                  
+                  {/* Barangay Banicain Logo */}
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 relative">
+                    <Image
+                      src="/banicainlogo.jpg"
+                      alt="Barangay Banicain Logo"
+                      width={100}
+                      height={100}
+                      className="object-cover w-full h-full rounded-full"
+                    />
                   </div>
                 </div>
                 
-                <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 mb-2">Dashboard Locked</h1>
-                <p className="text-sm sm:text-base text-gray-500 mb-6 sm:mb-8">Please login to access this page</p>
-                                
-                <p className="text-xs sm:text-sm text-gray-400 mt-4">
-                </p>
+                {/* Description Text */}
+                <div className="space-y-4 mt-4">
+                  <p className="text-base sm:text-lg font-bold text-gray-800 leading-relaxed">
+                    Transforming Waste Management in Barangay Banicain Through Smart IoT Automation.
+                  </p>
+                  <p className="text-sm sm:text-base font-semibold text-gray-600 leading-relaxed">
+                    Please use the login button in the topbar to access the dashboard and manage waste records.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
         </main>
+        
+        {/* QR Code - Bottom Left Corner */}
+        <div className="fixed bottom-4 left-4 z-50 bg-white rounded-xl shadow-lg p-2 border border-gray-200">
+          <div className="flex flex-col items-center gap-1">
+            {qrCodeUrl && (
+              <img 
+                src={qrCodeUrl} 
+                alt="QR Code to access EcoWaste" 
+                width={80} 
+                height={80}
+                className="rounded-lg"
+              />
+            )}
+            <p className="text-[8px] text-gray-500 text-center max-w-[80px]">Scan to visit EcoWaste</p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -96,6 +144,22 @@ export default function ProtectedLayout({ children, activeMenu }: ProtectedLayou
           {children}
         </div>
       </main>
+      
+      {/* QR Code - Bottom Left Corner (when logged in as well) */}
+      <div className="fixed bottom-4 left-4 z-50 bg-white rounded-xl shadow-lg p-2 border border-gray-200">
+        <div className="flex flex-col items-center gap-1">
+          {qrCodeUrl && (
+            <img 
+              src={qrCodeUrl} 
+              alt="QR Code to access EcoWaste" 
+              width={80} 
+              height={80}
+              className="rounded-lg"
+            />
+          )}
+          <p className="text-[8px] text-gray-500 text-center max-w-[80px]">Scan to visit EcoWaste</p>
+        </div>
+      </div>
     </div>
   );
 }
