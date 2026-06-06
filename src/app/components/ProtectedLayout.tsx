@@ -116,8 +116,8 @@ export default function ProtectedLayout({ children, activeMenu }: ProtectedLayou
           </div>
         </main>
         
-        {/* QR Code - Bottom Left Corner */}
-        <div className="fixed bottom-4 left-4 z-50 bg-white rounded-xl shadow-lg p-2 border border-gray-200">
+        {/* QR Code - Bottom Right Corner */}
+        <div className="fixed bottom-4 right-4 z-50 bg-white rounded-xl shadow-lg p-2 border border-gray-200">
           <div className="flex flex-col items-center gap-1">
             {qrCodeUrl && (
               <img 
@@ -145,8 +145,8 @@ export default function ProtectedLayout({ children, activeMenu }: ProtectedLayou
         </div>
       </main>
       
-      {/* QR Code - Bottom Left Corner (when logged in as well) */}
-      <div className="fixed bottom-4 left-4 z-50 bg-white rounded-xl shadow-lg p-2 border border-gray-200">
+      {/* QR Code - Bottom Right Corner (when logged in as well) */}
+      <div className="fixed bottom-4 right-4 z-50 bg-white rounded-xl shadow-lg p-2 border border-gray-200">
         <div className="flex flex-col items-center gap-1">
           {qrCodeUrl && (
             <img 
